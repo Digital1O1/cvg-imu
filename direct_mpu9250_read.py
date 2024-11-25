@@ -40,7 +40,7 @@ def enable_channels(channels, disable: bool=False):
     for ch in channels:
         enable = ch.parent / '_'.join((ch.name.rsplit("_", 1)[0], "en"))
         with open(enable, 'w') as fh:
-            print(f"{enable=} {en=}")
+            print(f"enable={enable} en={en}")
             fh.write(en)
 
 def enable_buffer(imu_path):
@@ -50,12 +50,6 @@ def enable_buffer(imu_path):
 
     with open(imu_path / "buffer" / "watermark", 'w') as fh:
         fh.write('1')
-
-#    with open(imu_path / "buffer" / "length", 'r') as fh:
-#        print(f"length={fh.read()}")
-#
-#    with open(imu_path / "buffer" / "watermark", 'r') as fh:
-#        print(f"watermark={fh.read()}")
 
     with open(imu_path / "buffer" / "enable", 'w') as fh:
         fh.write('1')
@@ -75,7 +69,7 @@ def main():
     input("Press any key to continue")
 
     char_buff = Path("/dev") / imu_path.name
-    #print(f"{char_buff=}")
+    print(f"char_buff={char_buff}")
     
     accel = [0,0,0]
     gyro = [0,0,0]
@@ -96,21 +90,21 @@ def main():
                 magn[0], magn[1], magn[2],
             ) = struct.unpack(">10h", x[:20])
             
-            timestamp = datetime.fromtimestamp(struct.unpack('<q', x[24:32])[0] / 1e9)
+            timestamp = datetime.fromtimestamp(struct.unpack('<q', x[24:])[0] / 1e9)
 
             accel = [a * 5.98e-4 for a in accel]
             gyro = [g * 1.064724e-3 for g in gyro]
             magn = [m * 1.769e-3 for m in magn]
             temp = temp / 333.87 + 21 # from arduino lib for IMU. Raises concern on whether this IC genuine.
 
-            print(f"{temp=:>.3f}C")
+            print(f"temp={temp:>.3f}C")
             print(f"{timestamp}")
             print(f"accel:\t{accel[0]: .3f}\t{accel[1]: .3f}\t{accel[2]: .3f}")
             print(f"gyro:\t{gyro[0]: .3f}\t{gyro[1]: .3f}\t{gyro[2]: .3f}")
             print(f"magn:\t{magn[0]: .3f}\t{magn[1]: .3f}\t{magn[2]: .3f}")
 
             # FIXME: maybe use select poll instead of sleep? At least do a smarter sleep.
-            time.sleep(0.05)
+            time.sleep(0.02)
         except KeyboardInterrupt as e:
             print("Exiting")
             break

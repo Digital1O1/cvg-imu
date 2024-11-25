@@ -15,18 +15,43 @@ Enabling this device requires a single line addition to `/boot/config.txt`
 
 Examples for device tree configuration can be found in the linux kernel's documentation.
 For example [https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/imu/invensense%2Cmpu6050.yaml](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/imu/invensense%2Cmpu6050.yaml)
+> [!TODO] 
+> Add mounting matrix to our device tree
 
 > [!Note] 
 > See: `/boot/overlays/README` 
 
 ### buster (oldoldstable; kernel 5.10.y)
-Add the folling lines to `/boot/config.txt`
+Modify the overlay for mpu6050 to configure the driver correctly. 
+
+This device tree fragment can be compiled then moved to `/boot/overlays/`.
+```sh
+# I copied and renamed the file from a local git of the RPi linux kernel (you may copy&paste from github)
+scp ianzur@jasmine:~/Documents/projects/rpi-linux-5.10/arch/arm/boot/dts/overlays/mpu6050-overlay.dts mpu9250-overlay.dts 
+
+# make the changes as show in file "mpu9250-overlay.dts", then compile
+dtc -@ -Hepapr -I dts -O dtb -o mpu9250.dtbo mpu9250-overlay.dts
+
+sudo mv mpu9250.dtbo /boot/overlays/
+# this gave me an error about how this move required permission changes, that is okay.
+
+# double checking that the file is there
+ls -la /boot/overlays/mpu*
+# should return:
+# -rwxr-xr-x 1 root root 841 Apr  8  2024 /boot/overlays/mpu6050.dtbo
+# -rwxr-xr-x 1 root root 841 Nov 25 16:50 /boot/overlays/mpu9250.dtbo 
+```
+> [!Note] 
+> Information regarding compiling device tree files can be found here.
+> [https://www.raspberrypi.com/documentation/computers/configuration.html#device-trees-overlays-and-parameters](https://www.raspberrypi.com/documentation/computers/configuration.html#device-trees-overlays-and-parameters)
+
+Now add the folling lines to `/boot/config.txt`
 ```sh
 # load overlay for mpu9250 (Invensense) 
-dtoverlay=mpu6050,addr=0x68,int_pin=4
+dtoverlay=mpu9250,addr=0x68,int_pin=4
 ```
 > [!Note]
-> The MPU9250 is an upgrade of the MPU6050. The device's share the same driver the device tree definition.
+> The MPU9250 is an upgrade of the MPU6050 that includes a magnometer.
 > 
 > devicetree definition src: [https://github.com/raspberrypi/linux/blob/rpi-5.10.y/arch/arm/boot/dts/overlays/mpu6050-overlay.dts](https://github.com/raspberrypi/linux/blob/rpi-5.10.y/arch/arm/boot/dts/overlays/mpu6050-overlay.dts)
 
@@ -38,6 +63,7 @@ dtoverlay=i2c-sensor,mpu9250,addr=0x68,int_pin=4
 ```
 
 > [!Note]
+> The definition of this device tree overlay has moved to a "common" file. The actual definition has not changed.
 >
 > devicetree def src: [https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/i2c-sensor-common.dtsi](https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/i2c-sensor-common.dtsi)
 
@@ -61,7 +87,8 @@ To maintain some security only users in the iio group may write to these files. 
 /etc/udev/rules.d/90-iio.rules
 ```
 # copy owner permissions to group (chmod g=u ...) change group to iio (chgrp iio)
-SUBSYSTEM=="iio", PROGRAM="/bin/sh -c 'chgrp -R iio /sys/bus/iio/devices/$kernel/ && chmod -R g=u /sys/bus/iio/devices/$kernel && chgrp iio /dev/$kernel && chmod g=u /dev/$kernel'"
+SUBSYSTEM=="iio", PROGRAM="/bin/sh -c 'chgrp -R iio /sys/bus/iio/devices/$kernel/ && chmod -R g=u /sys/bus/iio/devices/$kernel
+SUBSYSTEM=="iio", KERNEL=="iio:device*", chgrp iio /dev/$kernel && chmod g=u /dev/$kernel'"
 ```
 
 > [!Note] 
