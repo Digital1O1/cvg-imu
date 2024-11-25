@@ -1,0 +1,1 @@
+SUBSYSTEM=="iio", PROGRAM="/bin/sh -c 'chgrp -R iio /sys/bus/iio/devices/$kernel/ && chmod -R g=u /sys/bus/iio/devices/$kernel && chgrp iio /dev/$kernel && chmod g=u /dev/$kernel '"
