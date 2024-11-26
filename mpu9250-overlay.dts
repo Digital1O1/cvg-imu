@@ -1,0 +1,29 @@
+// Definitions for MPU9250
+/dts-v1/;
+/plugin/;
+
+/ {
+        compatible = "brcm,bcm2835";
+
+        fragment@0 {
+                target = <&i2c1>;
+                __overlay__ {
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+                        status = "okay";
+                        clock-frequency = <400000>;
+
+                        mpu9250: mpu9250@68 {
+                                compatible = "invensense,mpu9250";
+                                reg = <0x68>;
+                                interrupt-parent = <&gpio>;
+                                interrupts = <4 2>;
+                        };
+                };
+        };
+
+        __overrides__ {
+                interrupt = <&mpu9250>,"interrupts:0";
+                addr = <&mpu9250>,"reg:0";
+        };
+};

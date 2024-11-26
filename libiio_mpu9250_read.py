@@ -43,8 +43,8 @@ if __name__ == "__main__":
 
     buffer = iio.Buffer(imu, buf_size, cyclic=False)
 
-    for attr in imu.buffer_attrs:
-        print(f"{attr}: {imu.buffer_attrs[attr]}")
+ #   for attr in imu.buffer_attrs:
+ #       print(f"{attr}: {imu.buffer_attrs[attr]}")
     
     # what do these mean?
     # print(buffer.poll_fd)
@@ -80,7 +80,7 @@ if __name__ == "__main__":
             # Is this IC genuine?
             temp = temp / 333.87 + 21 
 
-            print(f"{imu.name=}\t{temp=:>.3f}C")
+            print(f"{imu.name}\t{temp:>.3f}C")
             print(f"{timestamp}")
             print(f"accel:\t{accel[0]: .3f}\t{accel[1]: .3f}\t{accel[2]: .3f}")
             print(f"gyro:\t{gyro[0]: .3f}\t{gyro[1]: .3f}\t{gyro[2]: .3f}")
