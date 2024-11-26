@@ -1,4 +1,6 @@
 # IMU integration
+> I created a script `setup.sh` to quickly perform all of the procedures outlined in this README. 
+
 To ensure that the head mounted lasers are safetly used in the CVG system, we are implementing a safety shutoff feature utilizing an IMU.
 
 ## Physical Connection
