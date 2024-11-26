@@ -48,10 +48,11 @@ fi
 echo "adding device tree overlay enable to $CONFIG_PATH"
 echo "dtoverlay=$OVERLAY_ENABLE" | tee -a $CONFIG_PATH
 
-echo "finished! Reboot required. Do you want to reboot now? [Y/n]"
-read response
+echo "Installing libiio + utils + python binding"
+apt-get install -y libiio-dev libiio-utils python3-libiio
 
-apt-get install libiio-dev libiio-utils python3-libiio
+echo "Finished! Reboot required. Do you want to reboot now? [Y/n]"
+read response
 
 if [[ -n $response && !($response =~ ^[Yy]) ]]; then
 	echo "Okay then. That was always allowed."
