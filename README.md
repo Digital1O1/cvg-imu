@@ -78,6 +78,10 @@ dtoverlay=i2c-sensor,mpu9250,addr=0x68,int_pin=4
 
 ## Driver
 No additional configuration is required for the sensor to be detected and the driver loaded. 
+
+> [!Note]
+> This can be confirmed with `lsmod | grep inv_mpu6050`
+
 But many of the virtual files created that one uses to access the device can only be modified by the root user. So some file permissions need to be changed to access the iio sysfs files without elevated permissions (sudo). This can be done with a udev rule.
 
 To maintain some security only users in the iio group may write to these files. Any user that needs to access these files should be added to the iio group `usermod -aG iio $USER`. 
@@ -94,9 +98,6 @@ SUBSYSTEM=="iio", KERNEL=="iio:device*", RUN+="/bin/sh -c 'chgrp iio /dev/$kerne
 > [!Note] 
 > udev documentation can be found all over but my favorite is here: 
 > [https://documentation.suse.com/sles/12-SP5/html/SLES-all/cha-udev.html](https://documentation.suse.com/sles/12-SP5/html/SLES-all/cha-udev.html)
-
-> [!Note]
-> This can be confirmed with `lsmod | grep inv_mpu6050`
 
 > [!Note]
 > I have seen some kernel messages regarding a failed interrupt acknowledgment. 
