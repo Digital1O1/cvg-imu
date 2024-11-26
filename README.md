@@ -87,8 +87,8 @@ To maintain some security only users in the iio group may write to these files. 
 /etc/udev/rules.d/90-iio.rules
 ```
 # copy owner permissions to group (chmod g=u ...) change group to iio (chgrp iio)
-SUBSYSTEM=="iio", PROGRAM="/bin/sh -c 'chgrp -R iio /sys/bus/iio/devices/$kernel/ && chmod -R g=u /sys/bus/iio/devices/$kernel
-SUBSYSTEM=="iio", KERNEL=="iio:device*", chgrp iio /dev/$kernel && chmod g=u /dev/$kernel'"
+SUBSYSTEM=="iio", RUN+="/bin/sh -c 'chgrp -R iio /sys/bus/iio/devices/$kernel/ && chmod -R g=u /sys/bus/iio/devices/$kernel'"
+SUBSYSTEM=="iio", KERNEL=="iio:device*", RUN+="/bin/sh -c 'chgrp iio /dev/$kernel && chmod g=u /dev/$kernel'"
 ```
 
 > [!Note] 
