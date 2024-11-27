@@ -122,7 +122,7 @@ IIO's goal is to support almost any device that is an ADC or DAC with a consiste
 
 > [src - A presentation by James Cameron](https://www.youtube.com/watch?v=644oH1FXdtE)
 
-- You may directly read & write from the files in `/sys/bus/iio/devices/iio:deviceN/buffer0/`
+- You may directly read & write from the files in `/sys/bus/iio/devices/iio:deviceN/`
 - Several userspace libraries exist to interface a bit more cleanly with iio:
   - [libiio (Analog Devices)](https://github.com/analogdevicesinc/libiio)
     - written in c, with python bindings
