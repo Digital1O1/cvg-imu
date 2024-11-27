@@ -117,7 +117,7 @@ Invensense contributed the driver for this device to the industrialio subsystem 
 
 #### What the hell is IIO?
 Industrial IO is a subsystem that was originally developed to communicate with sensors (specifically IMU's) by Jonathan Cameron for a wearables research project monitoring biomechanics of athletes.
-This subsystem utilizes sysfs (a virtual file system inside) to create a standard way to communicate with may sensors.
+This subsystem utilizes sysfs (a virtual file system used by the kernel to expose devices and subsystems) to create a standard way to communicate with sensors.
 IIO's goal is to support almost any device that is an ADC or DAC with a consistent user-space interface.
 
 > [src - A presentation by James Cameron](https://www.youtube.com/watch?v=644oH1FXdtE)
