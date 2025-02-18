@@ -14,6 +14,23 @@
 #define I2C_BUS "/dev/i2c-1"
 #define QUEUE_NAME "/sensor_data"
 #define PI 3.14159265358979323846
+#define AK8963_WHO_AM_I    0x00
+#define AK8963_INFO       0x01
+#define AK8963_ST1        0x02
+#define AK8963_XOUT_L     0x03
+#define AK8963_XOUT_H     0x04
+#define AK8963_YOUT_L     0x05
+#define AK8963_YOUT_H     0x06
+#define AK8963_ZOUT_L     0x07
+#define AK8963_ZOUT_H     0x08
+#define AK8963_ST2        0x09
+#define AK8963_CNTL1      0x0A
+#define AK8963_CNTL2      0x0B
+#define AK8963_ASAX       0x10
+#define AK8963_ASAY       0x11
+#define AK8963_ASAZ       0x12
+
+float mag_sensitivity_adj[3] = {0}; // Sensitivity adjustment values
 
 // Sensor data structure
 typedef struct {
@@ -112,6 +129,49 @@ int init_i2c(void) {
         return -1;
     }
 
+    // Enable I2C bypass to access AK8963
+    buf[0] = 0x37;  // INT_PIN_CFG
+    buf[1] = 0x02;  // Enable I2C bypass
+    if (write(fd, buf, 2) != 2) {
+        perror("Failed to enable I2C bypass");
+        close(fd);
+        return -1;
+    }
+
+    // Initialize AK8963
+    if (ioctl(fd, I2C_SLAVE, AK8963_ADDR) < 0) {
+        perror("Failed to set AK8963 as slave");
+        close(fd);
+        return -1;
+    }
+
+    // Reset AK8963
+    buf[0] = AK8963_CNTL2;
+    buf[1] = 0x01;  // Reset
+    write(fd, buf, 2);
+    usleep(1000);  // Wait for reset
+
+    // Enter Fuse ROM access mode
+    buf[0] = AK8963_CNTL1;
+    buf[1] = 0x0F;  // Fuse ROM access mode
+    write(fd, buf, 2);
+    usleep(1000);
+
+    // Read sensitivity adjustment values
+    buf[0] = AK8963_ASAX;
+    write(fd, buf, 1);
+    read(fd, buf, 3);
+    
+    // Calculate sensitivity adjustment values
+    mag_sensitivity_adj[0] = (float)(buf[0] - 128) / 256.0f + 1.0f;
+    mag_sensitivity_adj[1] = (float)(buf[1] - 128) / 256.0f + 1.0f;
+    mag_sensitivity_adj[2] = (float)(buf[2] - 128) / 256.0f + 1.0f;
+
+    // Enter continuous measurement mode 2 (100 Hz)
+    buf[0] = AK8963_CNTL1;
+    buf[1] = 0x16;  // 16-bit output, Continuous mode 2
+    write(fd, buf, 2);
+    usleep(1000);
     return fd;
 }
 
@@ -134,8 +194,28 @@ void read_sensor_data(int fd, float *accel, float *gyro, float *mag) {
     gyro[1] = (float)((short)(buf[10] << 8 | buf[11])) / 32.8;
     gyro[2] = (float)((short)(buf[12] << 8 | buf[13])) / 32.8;
 
-    // Simplified magnetometer reading (in practice, you'd need more complex initialization and reading)
-    mag[0] = mag[1] = mag[2] = 0;  // Placeholder
+    if (ioctl(fd, I2C_SLAVE, AK8963_ADDR) < 0) {
+        perror("Failed to select AK8963");
+        return;
+    }
+
+    //Check data ready
+    buf[0] = AK8963_ST1;
+    write(fd, buf, 1);
+    read(fd, buf, 1);
+
+    if(bug[0] & 0x01) {
+        // Read magnetometer data
+        buf[0] = AK8963_XOUT_L;
+        write(fd, buf, 1);
+        read(fd, buf, 7);
+
+        // Convert raw data to float values
+        // Magnetometer (16-bit output)
+        mag[0] = (float)((short)(buf[1] << 8 | buf[0])) * mag_sensitivity_adj[0];
+        mag[1] = (float)((short)(buf[3] << 8 | buf[2])) * mag_sensitivity_adj[1];
+        mag[2] = (float)((short)(buf[5] << 8 | buf[4])) * mag_sensitivity_adj[2];
+    }
 }
 
 void calculate_orientation(float *accel, float *gyro, float *mag, SensorData *data) {
@@ -145,6 +225,14 @@ void calculate_orientation(float *accel, float *gyro, float *mag, SensorData *da
     float accel_roll = atan2f(accel[1], sqrtf(accel[0] * accel[0] + accel[2] * accel[2])) * 180.0 / PI;
     float accel_pitch = atan2f(-accel[0], sqrtf(accel[1] * accel[1] + accel[2] * accel[2])) * 180.0 / PI;
     
+    // Calculate yaw from magnetometer
+    float mag_x = mag[0] * cosf(pitch * PI / 180.0) + 
+                 mag[2] * sinf(pitch * PI / 180.0);
+    float mag_y = mag[0] * sinf(roll * PI / 180.0) * sinf(pitch * PI / 180.0) + 
+                 mag[1] * cosf(roll * PI / 180.0) - 
+                 mag[2] * sinf(roll * PI / 180.0) * cosf(pitch * PI / 180.0);
+    float mag_yaw = atan2f(mag_y, mag_x) * 180.0 / PI;
+
     // Integrate gyroscope data
     roll = roll + gyro[0] * DT;
     pitch = pitch + gyro[1] * DT;
@@ -153,6 +241,11 @@ void calculate_orientation(float *accel, float *gyro, float *mag, SensorData *da
     // Complementary filter
     roll = ALPHA * roll + (1 - ALPHA) * accel_roll;
     pitch = ALPHA * pitch + (1 - ALPHA) * accel_pitch;
+    yaw = ALPHA * yaw + (1 - ALPHA) * mag_yaw;
+
+    // Normalize yaw to 0-360 degrees
+    while (yaw < 0) yaw += 360;
+    while (yaw >= 360) yaw -= 360;
     
     // Store results
     data->roll = roll;
