@@ -1,57 +1,121 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mqueue.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <signal.h>
+#include "sensor_common.h"
 
-#define QUEUE_NAME "/sensor_data"
-#define MAX_MSG_SIZE 64
+// Function prototypes
+void request_sensor_calibration();
+void handle_signal(int sig);
 
-typedef struct {
-    float roll;
-    float pitch;
-    float yaw;
-} SensorData;
+// Global variables
+int shm_fd = -1;
+SharedData *shared_data = NULL;
 
-int main() {
-    mqd_t mq;
-    struct mq_attr attr;
-    char buffer[MAX_MSG_SIZE];
-    SensorData data;
+void handle_signal(int sig)
+{
+    if (shared_data)
+    {
+        munmap(shared_data, sizeof(SharedData));
+    }
+    if (shm_fd >= 0)
+    {
+        close(shm_fd);
+    }
+    exit(sig);
+}
 
-    // Set up message queue attributes
-    attr.mq_flags = 0;
-    attr.mq_maxmsg = 10;
-    attr.mq_msgsize = MAX_MSG_SIZE;
-    attr.mq_curmsgs = 0;
+int main()
+{
+    int last_update_count = -1;
 
-    // Open message queue
-    mq = mq_open(QUEUE_NAME, O_RDONLY | O_CREAT, 0644, &attr);
-    if (mq == (mqd_t)-1) {
-        perror("mq_open");
+    // Set up signal handlers
+    signal(SIGINT, handle_signal);
+    signal(SIGTERM, handle_signal);
+
+    // Open shared memory
+    shm_fd = shm_open(SHM_NAME, O_RDONLY, 0666);
+    if (shm_fd == -1)
+    {
+        perror("shm_open");
+        printf("Make sure the sender program is running first!\n");
         exit(1);
     }
 
-    printf("Waiting for sensor data...\n");
-
-    while (1) {
-        ssize_t bytes_read = mq_receive(mq, buffer, MAX_MSG_SIZE, NULL);
-        
-        if (bytes_read >= 0) {
-            // Unpack the data
-            memcpy(&data, buffer, sizeof(SensorData));
-            
-            // Process the data
-            printf("Roll: %.2f°, Pitch: %.2f°, Yaw: %.2f°\n",
-                   data.roll, data.pitch, data.yaw);
-        }
+    // Map shared memory
+    shared_data = mmap(NULL, sizeof(SharedData), PROT_READ, MAP_SHARED, shm_fd, 0);
+    if (shared_data == MAP_FAILED)
+    {
+        perror("mmap");
+        close(shm_fd);
+        exit(1);
     }
 
+    printf("Sensor data receiver started. Press 'c' to calibrate, 'q' to quit.\n");
+    printf("Waiting for sensor data...\n");
+
+    // Set terminal to non-canonical mode
+    system("stty raw");
+
+    while (1)
+    {
+        // Check for keyboard input
+        char c = 0;
+        if (read(STDIN_FILENO, &c, 1) > 0)
+        {
+            if (c == 'c' || c == 'C')
+            {
+                printf("\rCalibrating sensors...\n");
+                request_sensor_calibration();
+            }
+            else if (c == 'q' || c == 'Q')
+            {
+                printf("\rExiting...\n");
+                break;
+            }
+        }
+
+        // Check if new data is available
+        if (shared_data->updated != last_update_count)
+        {
+            last_update_count = shared_data->updated;
+
+            // Process the data
+            printf("\rRoll: %.2f°, Pitch: %.2f°, Yaw: %.2f°    ",
+                   shared_data->roll, shared_data->pitch, shared_data->yaw);
+            fflush(stdout);
+        }
+
+        usleep(10000); // 10ms sleep
+    }
+
+    // Restore terminal
+    system("stty cooked");
+
     // Cleanup
-    mq_close(mq);
-    mq_unlink(QUEUE_NAME);
+    munmap(shared_data, sizeof(SharedData));
+    close(shm_fd);
 
     return 0;
+}
+
+void request_sensor_calibration()
+{
+    int fifo_fd;
+
+    // Open pipe for writing
+    fifo_fd = open(FIFO_PATH, O_WRONLY | O_NONBLOCK);
+    if (fifo_fd < 0)
+    {
+        perror("Failed to open calibration FIFO");
+        printf("Make sure the sender program is running!\n");
+        return;
+    }
+
+    // Send calibration command
+    write(fifo_fd, CALIBRATE_CMD, strlen(CALIBRATE_CMD));
+    close(fifo_fd);
 }
