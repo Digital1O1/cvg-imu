@@ -420,37 +420,90 @@ int read_sensor_data(const char *device_dir, float *accel, float *gyro, float *m
 void calculate_orientation(float *accel, float *gyro, float *mag, SharedData *data)
 {
     static float roll = 0, pitch = 0, yaw = 0;
+    static float prev_time = 0;
+    float current_time, dt;
+    
+    // Get current time and calculate delta time
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    current_time = ts.tv_sec + ts.tv_nsec / 1000000000.0;
+    dt = prev_time == 0 ? DT : current_time - prev_time;
+    prev_time = current_time;
+    
+    // Limit dt to prevent large jumps
+    if (dt > 0.2) dt = 0.2;
 
-    // Calculate roll and pitch from accelerometer
+    // Calculate roll and pitch from accelerometer (these are correct)
     float accel_roll = atan2f(accel[1], sqrtf(accel[0] * accel[0] + accel[2] * accel[2])) * 180.0 / PI;
     float accel_pitch = atan2f(-accel[0], sqrtf(accel[1] * accel[1] + accel[2] * accel[2])) * 180.0 / PI;
 
-    // Calculate yaw from magnetometer
-    float mag_x = mag[0] * cosf(pitch * PI / 180.0) +
-                  mag[2] * sinf(pitch * PI / 180.0);
-    float mag_y = mag[0] * sinf(roll * PI / 180.0) * sinf(pitch * PI / 180.0) +
-                  mag[1] * cosf(roll * PI / 180.0) -
-                  mag[2] * sinf(roll * PI / 180.0) * cosf(pitch * PI / 180.0);
-    float mag_yaw = atan2f(mag_y, mag_x) * 180.0 / PI;
+    // Apply complementary filter for roll and pitch
+    // These lines update roll and pitch based on both accel and gyro
+    roll = ALPHA * (roll + gyro[0] * dt) + (1 - ALPHA) * accel_roll;
+    pitch = ALPHA * (pitch + gyro[1] * dt) + (1 - ALPHA) * accel_pitch;
 
-    // Integrate gyroscope data
-    roll = roll + gyro[0] * DT;
-    pitch = pitch + gyro[1] * DT;
-    yaw = yaw + gyro[2] * DT;
-
-    // Complementary filter
-    roll = ALPHA * roll + (1 - ALPHA) * accel_roll;
-    pitch = ALPHA * pitch + (1 - ALPHA) * accel_pitch;
-    yaw = ALPHA * yaw + (1 - ALPHA) * mag_yaw;
-
+    // Improved tilt compensation for magnetometer
+    // Convert roll and pitch to radians for calculations
+    float roll_rad = roll * PI / 180.0;
+    float pitch_rad = pitch * PI / 180.0;
+    
+    // Normalize magnetometer readings first
+    float mag_norm = sqrtf(mag[0]*mag[0] + mag[1]*mag[1] + mag[2]*mag[2]);
+    if (mag_norm > 0.01) {  // Only normalize if we have valid readings
+        mag[0] /= mag_norm;
+        mag[1] /= mag_norm;
+        mag[2] /= mag_norm;
+    } else {
+        // If magnetometer readings are too weak, rely only on gyro
+        yaw = yaw + gyro[2] * dt;
+        goto yaw_done;
+    }
+    
+    // Tilt-compensated magnetic field components
+    float mag_x = mag[0] * cosf(pitch_rad) + 
+                 mag[1] * sinf(roll_rad) * sinf(pitch_rad) + 
+                 mag[2] * cosf(roll_rad) * sinf(pitch_rad);
+    
+    float mag_y = mag[1] * cosf(roll_rad) - 
+                 mag[2] * sinf(roll_rad);
+    
+    // Calculate heading from magnetometer
+    float mag_yaw = atan2f(-mag_y, mag_x) * 180.0 / PI;
+    
+    // Normalize to 0-360 degrees
+    if (mag_yaw < 0) mag_yaw += 360.0;
+    
+    // Check if magnetometer reading is valid
+    static float last_good_mag_yaw = 0;
+    if (!isnan(mag_yaw) && !isinf(mag_yaw)) {
+        last_good_mag_yaw = mag_yaw;
+    } else {
+        mag_yaw = last_good_mag_yaw;
+    }
+    
+    // Handle the wraparound problem when crossing North (0/360 degrees)
+    if (mag_yaw - yaw > 180) mag_yaw -= 360;
+    if (mag_yaw - yaw < -180) mag_yaw += 360;
+    
+    // Use a gentler filter for yaw with more weight on magnetometer
+    // This helps prevent drift while still smoothing out magnetometer noise
+    const float YAW_ALPHA = 0.75;  // More weight on magnetometer for yaw
+    yaw = YAW_ALPHA * (yaw + gyro[2] * dt) + (1 - YAW_ALPHA) * mag_yaw;
+    
+yaw_done:
     // Normalize yaw to 0-360 degrees
-    while (yaw < 0)
-        yaw += 360;
-    while (yaw >= 360)
-        yaw -= 360;
+    while (yaw < 0) yaw += 360;
+    while (yaw >= 360) yaw -= 360;
 
     // Store results
     data->roll = roll;
     data->pitch = pitch;
     data->yaw = yaw;
+    
+    // Print magnetometer information for debugging
+    static int print_counter = 0;
+    if (++print_counter % 100 == 0) {  // Print every 100 samples
+        printf("Mag raw: [%.3f, %.3f, %.3f], Mag yaw: %.1f, Gyro Z: %.3f\n", 
+               mag[0], mag[1], mag[2], mag_yaw, gyro[2]);
+    }
 }
