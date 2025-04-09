@@ -86,5 +86,53 @@ MPUData read_sensors(const char *sensor_name)
  */
 void calculate_orientation(MPUData data, float *roll, float *pitch, float *yaw, float dt, float filter_alpha)
 {
+    // maintain state between calls
     static float gyro_roll = 0.0f, gyro_pitch = 0.0f, gyro_yaw = 0.0f;
+
+    // calculate roll and pitch from accelerometer (radians)
+    float accel_roll = atan2(data.accel[1], data.accel[2]);
+    float accel_pitch = atan2(-data.accel[1], sqrt(data.accel[1] * data.accel[1] + data.accel[2] * data.accel[2]));
+
+    // calculate yaw from magentomter (radians), applying tilt compensation
+    float mag_x = data.mag[0] * cos(accel_pitch) + data.mag[2] * sin(accel_pitch);
+    float mag_x = data.mag[0] * cos(accel_pitch) + data.mag[2] * sin(accel_pitch);
+    float mag_y = data.mag[0] * sin(accel_roll) * sin(accel_pitch) + data.mag[1] * cos(accel_roll) - data.mag[2] * sin(accel_roll) * cos(accel_pitch);
+    float mag_yaw = atan2(-mag_y, mag_x); // calculate tilt-compensated yaw
+
+    // update gyro-based angles
+    gyro_roll += data.gyro[0] * dt;
+    gyro_pitch += data.gyro[1] * dt;
+    gyro_yaw += data.gyro[2] * dt;
+
+    // apply complementary filter
+    *roll = filter_alpha * gyro_roll + (1.0f - filter.alpha) * accel_roll;
+    *pitch = filter_alpha * gyro_pitch + (1.0f - filter.alpha) * accel_pitch;
+    *yaw = filter_alpha * gyro_yaw + (1.0f - filter.alpha) * mag_yaw;
+
+    // Convert from radians to degrees
+    *roll = *roll * 180.0f / M_PI;
+    *pitch = *pitch * 180.0f / M_PI;
+    *yaw = *yaw * 180.0f / M_PI;
+}
+
+int main() {
+    // Read sensor data
+    MPUData data = read_sensors("mpu9250"); // Replace with your actual sensor name
+    
+    // Print raw sensor data
+    printf("Accelerometer (m/s²): X=%.2f, Y=%.2f, Z=%.2f\n", 
+           data.accel[0], data.accel[1], data.accel[2]);
+    printf("Gyroscope (rad/s): X=%.2f, Y=%.2f, Z=%.2f\n", 
+           data.gyro[0], data.gyro[1], data.gyro[2]);
+    printf("Magnetometer (μT): X=%.2f, Y=%.2f, Z=%.2f\n", 
+           data.mag[0], data.mag[1], data.mag[2]);
+    
+    // Calculate orientation
+    float roll, pitch, yaw;
+    calculate_orientation(data, &roll, &pitch, &yaw, 0.01f, 0.98f); // 0.01s time step, 0.98 filter coefficient
+    
+    // Print orientation
+    printf("Orientation: Roll=%.2f°, Pitch=%.2f°, Yaw=%.2f°\n", roll, pitch, yaw);
+    
+    return 0;
 }
