@@ -2,13 +2,22 @@
 #include <string.h> // strstr()
 #include <iio.h>    // iio_create_default_context(), iio_context_get_devices_count(), iio_context_get_device(), iio_device_get_name(), iio_device_find_channel(), iio_channel_attr_read_double()
 #include <math.h>   // atan2(), sqrt(), sin(), cos(), M_PI
+#include <stdlib.h> // exit()
+#include <fcntl.h> // open(), O_READONLY, O_WRONLY, O_NONBLOCK, O_CREAT, O_RDWR, O_NONBLOCK
+#include <unistd.h> // close(), read(), write(), usleep(), ftruncate(), unlink(), STDIN_FILENO
+#include <signal.h> // signal(), SIGINT, SIGTERM, sig_atomic_t
+#include <sys/mman.h> // shm_open(), mmap(), munmap(), shm_unlink(), PROT_READ, PROT_WRITE, MAP_SHARED
+#include <sys/stat.h> // mkfifo(), S_IRUSR, S_IWUSR, S_IRGRP, S_IWGRP, S_IROTH, S_IWOTH (for mode flags)
+#include <errno.h> // errno, EEXIST, EAGAIN, EWOULDBLOCK
+
+#include "sensor_common.h"
 
 // Struct to hold sensor data
 typedef struct
 {
-    float accel[3];
-    float gyro[3];
-    float mag[3];
+    float accel[3]; // m/s^2
+    float gyro[3]; // rad/s
+    float mag[3]; // Gauss
 } MPUData;
 
 /**
