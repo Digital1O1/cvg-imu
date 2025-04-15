@@ -1,15 +1,11 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <signal.h>
-#include "sensor_common.h"
-
-// Function prototypes
-void request_sensor_calibration();
-void handle_signal(int sig);
+#include <stdio.h> // printnf(), perror(), fflush()
+#include <stdlib.h> // exit(), system()
+#include <string.h> // strlen()
+#include <fcntl.h> // open(), O_READONLY, O_WRONLY, O_NONBLOCK
+// #include <sys/stat.h>  For file permission constants, probably unneeded test without
+#include <unistd.h> // close(), read(), write(), usleep(), STDIN_FILENO
+#include <signal.h> // signal(), SIGINT, SIGTERM
+#include "sensor_common.h" // duh
 
 // Global variables
 int shm_fd = -1;
