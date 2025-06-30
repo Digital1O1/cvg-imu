@@ -7,6 +7,8 @@
 #include <signal.h> // signal(), SIGINT, SIGTERM
 #include "sensor_common.h" // duh
 
+void request_sensor_calibration(void);
+
 // Global variables
 int shm_fd = -1;
 SharedData *shared_data = NULL;

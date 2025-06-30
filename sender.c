@@ -39,7 +39,7 @@ MPUData read_sensors(const char *sensor_name)
     ctx = iio_create_default_context();
     if (!ctx)
     {
-        frpintf(stderr, 'Unable to create IIO context\n');
+        fprintf(stderr, "Unable to create IIO context\n");
         return data;
     }
 
@@ -104,7 +104,6 @@ void calculate_orientation(MPUData data, float *roll, float *pitch, float *yaw, 
 
     // calculate yaw from magentomter (radians), applying tilt compensation
     float mag_x = data.mag[0] * cos(accel_pitch) + data.mag[2] * sin(accel_pitch);
-    float mag_x = data.mag[0] * cos(accel_pitch) + data.mag[2] * sin(accel_pitch);
     float mag_y = data.mag[0] * sin(accel_roll) * sin(accel_pitch) + data.mag[1] * cos(accel_roll) - data.mag[2] * sin(accel_roll) * cos(accel_pitch);
     float mag_yaw = atan2(-mag_y, mag_x); // calculate tilt-compensated yaw
 
@@ -114,14 +113,14 @@ void calculate_orientation(MPUData data, float *roll, float *pitch, float *yaw, 
     gyro_yaw += data.gyro[2] * dt;
 
     // apply complementary filter
-    *roll = filter_alpha * gyro_roll + (1.0f - filter.alpha) * accel_roll;
-    *pitch = filter_alpha * gyro_pitch + (1.0f - filter.alpha) * accel_pitch;
-    *yaw = filter_alpha * gyro_yaw + (1.0f - filter.alpha) * mag_yaw;
+    *roll = filter_alpha * gyro_roll + (1.0f - filter_alpha) * accel_roll;
+    *pitch = filter_alpha * gyro_pitch + (1.0f - filter_alpha) * accel_pitch;
+    *yaw = filter_alpha * gyro_yaw + (1.0f - filter_alpha) * mag_yaw;
 
     // Convert from radians to degrees
-    *roll = *roll * 180.0f / M_PI;
-    *pitch = *pitch * 180.0f / M_PI;
-    *yaw = *yaw * 180.0f / M_PI;
+    *roll = *roll * 180.0f / 3.14159;
+    *pitch = *pitch * 180.0f / 3.14159;
+    *yaw = *yaw * 180.0f / 3.14159;
 }
 
 int main() {
