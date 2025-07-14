@@ -108,6 +108,7 @@ int main() {
     float gravity[3];
     // Forward vector (0,0,1)
     float forward[3] = {0, 0, 1};
+    int was_in_range = 1; // Track if previously in range (<=50 deg)
     while (!stop) {
         for (int j = 0; j < 3; j++) {
             read_gravity_raw(gravity_dir, axes[j], &raw_gravity[j]);
@@ -123,11 +124,19 @@ int main() {
         float angle_rad = acosf(dot);
         float angle_deg = angle_rad * 180.0f / M_PI;
         printf("\rGravity: [%.4f %.4f %.4f] | Magnitude: %.4f | Angle: %.2f deg   ", gravity[0], gravity[1], gravity[2], gmag, angle_deg);
-        if (angle_deg <= 50.0f) {
-            printf("within range   ");
+
+        int in_range = (angle_deg <= 50.0f);
+        if (in_range) {
+            printf("Within range   ");
         } else {
-            printf("outside range   ");
+            printf("Outside range   ");
+            if (was_in_range) {
+                // Just left the range, trigger the command
+                system("echo \"LASER_OFF\" > /tmp/hmdop_laser_pipe");
+            }
         }
+        was_in_range = in_range;
+
         fflush(stdout);
         usleep(10000); // 10 ms (100Hz)
     }
