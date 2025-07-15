@@ -128,6 +128,7 @@ int main() {
         int in_range = (angle_deg <= 50.0f);
         if (in_range) {
             printf("Within range   ");
+	    system("echo \"LASER_ON\" > /tmp/hmdop_laser_pipe");
         } else {
             printf("Outside range   ");
             if (was_in_range) {
@@ -137,7 +138,6 @@ int main() {
         }
         was_in_range = in_range;
 
-        fflush(stdout);
         usleep(10000); // 10 ms (100Hz)
     }
     printf("\nStopping.\n");
