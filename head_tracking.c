@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
 #include <dirent.h>
 #include <math.h>
 #include <fcntl.h>
@@ -55,13 +54,7 @@ void calibrate_gravity_offset(struct iio_device *dev, struct iio_channel **gravi
     exit(0);
 }
 
-void handle_sigint(int sig) {
-    printf("\nStopping.\n");
-    exit(0);
-}
-
 int main() {
-    signal(SIGINT, handle_sigint);
     // --- libiio setup ---
     struct iio_context *ctx = iio_create_default_context();
     if (!ctx) {
@@ -88,6 +81,7 @@ int main() {
         iio_context_destroy(ctx);
         return 1;
     }
+    int was_in_range = 1;
     while (1) {
         ssize_t nbytes = iio_buffer_refill(buf);
         if (nbytes < 0) {
@@ -99,7 +93,6 @@ int main() {
             struct iio_channel *ch = iio_device_get_channel(dev, i);
             if (!iio_channel_is_enabled(ch)) continue;
             void *data = iio_buffer_first(buf, ch);
-            // Assume 32-bit int data, adjust if needed
             int32_t value = *(int32_t *)data;
             gravity[g++] = value * 0.0000001f; // Use scale as before
         }
@@ -117,7 +110,16 @@ int main() {
             printf("Within range   ");
         } else {
             printf("Outside range   ");
+            if (was_in_range) {
+                int pipe_fd = open("/tmp/hmdop_laser_pipe", O_WRONLY | O_NONBLOCK);
+                if (pipe_fd >= 0) {
+                    const char *msg = "LASER_OFF\n";
+                    write(pipe_fd, msg, strlen(msg));
+                    close(pipe_fd);
+                }
+            }
         }
+        was_in_range = in_range;
         fflush(stdout);
         usleep(10000); // 10 ms (100Hz)
     }
