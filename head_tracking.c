@@ -112,14 +112,14 @@ int main() {
             printf("Within range   ");
         } else {
             printf("Outside range   ");
-//            if (was_in_range) {
+            if (was_in_range) {
                 int pipe_fd = open("/tmp/hmdop_laser_pipe", O_WRONLY | O_NONBLOCK);
                 if (pipe_fd >= 0) {
                     const char *msg = "LASER_OFF\n";
                     write(pipe_fd, msg, strlen(msg));
                     close(pipe_fd);
                 }
-//            }
+              }
         }
         was_in_range = in_range;
         fflush(stdout);

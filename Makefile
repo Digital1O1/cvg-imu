@@ -21,7 +21,7 @@ print_gravity: print_gravity.c
 	$(CC) $(CFLAGS) print_gravity.c -o print_gravity -lm
 
 head_tracking: head_tracking.c
-	$(CC) $(CFLAGS) head_tracking.c -o head_tracking -lm
+	$(CC) $(CFLAGS) head_tracking.c -o head_tracking -lm -liio
 
 clean:
 	rm -f $(TARGETS)
