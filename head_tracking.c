@@ -68,54 +68,43 @@ int main() {
         fprintf(stderr, "Failed to create IIO context.\n");
         return 1;
     }
-    struct iio_device *dev = NULL;
-    unsigned int dev_count = iio_context_get_devices_count(ctx);
-    for (unsigned int i = 0; i < dev_count; i++) {
-        dev = iio_context_get_device(ctx, i);
-        // Look for device with gravity_x channel
-        struct iio_channel *ch = iio_device_find_channel(dev, "gravity_x", false);
-        if (ch) break;
-        dev = NULL;
-    }
+    struct iio_device *dev = iio_context_find_device(ctx, "gravity");
     if (!dev) {
-        fprintf(stderr, "No IIO device with gravity_x channel found.\n");
+        fprintf(stderr, "Could not find gravity device.\n");
         iio_context_destroy(ctx);
         return 1;
     }
-    // Find gravity channels
-    struct iio_channel *gravity_ch[GRAVITY_CHANNELS];
-    for (int j = 0; j < GRAVITY_CHANNELS; j++) {
-        gravity_ch[j] = iio_device_find_channel(dev, GRAVITY_NAMES[j], false);
-        if (!gravity_ch[j]) {
-            fprintf(stderr, "Could not find channel %s\n", GRAVITY_NAMES[j]);
-            iio_context_destroy(ctx);
-            return 1;
-        }
+    // Enable all gravity channels
+    unsigned int num_channels = iio_device_get_channels_count(dev);
+    for (unsigned int i = 0; i < num_channels; i++) {
+        struct iio_channel *ch = iio_device_get_channel(dev, i);
+        iio_channel_enable(ch);
     }
-    // Optionally run calibration if requested (e.g., via command line arg)
-    // calibrate_gravity_offset(dev, gravity_ch);
-    // --- Main loop ---
-    float gravity[3];
-    float scale[3] = {0.0000001f, 0.0000001f, 0.0000001f};
-    float offset[3] = {0, 0, 0};
-    // Only read offset for each channel, not scale
-    for (int j = 0; j < GRAVITY_CHANNELS; j++) {
-        double o = 0;
-        if (iio_channel_attr_read_double(gravity_ch[j], "offset", &o) < 0) o = 0.0;
-        offset[j] = (float)o;
+    // Create buffer
+    size_t buf_size = 1; // number of samples
+    struct iio_buffer *buf = iio_device_create_buffer(dev, buf_size, false);
+    if (!buf) {
+        fprintf(stderr, "Could not create buffer.\n");
+        iio_context_destroy(ctx);
+        return 1;
     }
-    float forward[3] = {0, 0, 1};
-    int was_in_range = 1;
     while (1) {
-        for (int j = 0; j < GRAVITY_CHANNELS; j++) {
-            double raw = 0;
-            if (iio_channel_attr_read_double(gravity_ch[j], "raw", &raw) < 0) {
-                fprintf(stderr, "Error reading raw for %s\n", GRAVITY_NAMES[j]);
-                raw = 0;
-            }
-            gravity[j] = (float)(raw * scale[j] + offset[j] - GRAVITY_OFFSET[j]);
+        ssize_t nbytes = iio_buffer_refill(buf);
+        if (nbytes < 0) {
+            fprintf(stderr, "Buffer refill failed: %zd\n", nbytes);
+            break;
+        }
+        float gravity[3] = {0};
+        for (unsigned int i = 0, g = 0; i < num_channels && g < 3; i++) {
+            struct iio_channel *ch = iio_device_get_channel(dev, i);
+            if (!iio_channel_is_enabled(ch)) continue;
+            void *data = iio_buffer_first(buf, ch);
+            // Assume 32-bit int data, adjust if needed
+            int32_t value = *(int32_t *)data;
+            gravity[g++] = value * 0.0000001f; // Use scale as before
         }
         float gmag = sqrt(gravity[0]*gravity[0] + gravity[1]*gravity[1] + gravity[2]*gravity[2]);
+        float forward[3] = {0, 0, 1};
         float fmag = 1.0f;
         float dot = (gravity[0]*forward[0] + gravity[1]*forward[1] + gravity[2]*forward[2]) / (gmag * fmag);
         if (dot > 1.0f) dot = 1.0f;
@@ -128,18 +117,11 @@ int main() {
             printf("Within range   ");
         } else {
             printf("Outside range   ");
-            if (was_in_range) {
-                int pipe_fd = open("/tmp/hmdop_laser_pipe", O_WRONLY | O_NONBLOCK);
-                if (pipe_fd >= 0) {
-                    const char *msg = "LASER_OFF\n";
-                    write(pipe_fd, msg, strlen(msg));
-                    close(pipe_fd);
-                }
-            }
         }
-        was_in_range = in_range;
+        fflush(stdout);
         usleep(10000); // 10 ms (100Hz)
     }
+    iio_buffer_destroy(buf);
     iio_context_destroy(ctx);
     printf("\nStopping.\n");
     return 0;
