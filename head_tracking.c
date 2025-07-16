@@ -5,56 +5,15 @@
 #include <signal.h>
 #include <dirent.h>
 #include <math.h>
+#include <fcntl.h>
+#include <iio.h>
 
-#define GRAVITY_SCALE 0.0000001f  // Use this scale instead of sysfs value
+#define GRAVITY_CHANNELS 3
+static const char *GRAVITY_NAMES[GRAVITY_CHANNELS] = {"gravity_x_raw", "gravity_y_raw", "gravity_z_raw"};
 // Calibration: set to {0,0,0} initially, then update after calibration
 static float GRAVITY_OFFSET[3] = {1.279940f, 0.227644f, -0.084857f};
 
-volatile sig_atomic_t stop = 0;
-void handle_sigint(int sig) { stop = 1; }
-
-// Helper to read a float from sysfs
-int read_sysfs_float(const char *dir, const char *file, float *value) {
-    char path[512], buf[64];
-    snprintf(path, sizeof(path), "%s/%s", dir, file);
-    FILE *f = fopen(path, "r"); 
-    if (!f) return -1;
-    if (!fgets(buf, sizeof(buf), f)) { fclose(f); return -1; }
-    *value = atof(buf);
-    fclose(f);
-    return 0;
-}
-
-// Helper to read a raw gravity value (no scaling)
-int read_gravity_raw(const char *dev_dir, const char *axis, int *raw_out) {
-    char raw_file[64];
-    snprintf(raw_file, sizeof(raw_file), "in_gravity_%s_raw", axis);
-    char path[512], buf[64];
-    snprintf(path, sizeof(path), "%s/%s", dev_dir, raw_file);
-    FILE *f = fopen(path, "r");
-    if (!f) return -1;
-    if (!fgets(buf, sizeof(buf), f)) { fclose(f); return -1; }
-    *raw_out = atoi(buf);
-    fclose(f);
-    return 0;
-}
-
-// Find the gravity IIO device directory
-void find_gravity_device_dir(char *gravity_dir, size_t gravity_len) {
-    DIR *dir = opendir("/sys/bus/iio/devices/");
-    if (!dir) return;
-    struct dirent *entry;
-    char path[512];
-    while ((entry = readdir(dir)) != NULL) {
-        if (strncmp(entry->d_name, "iio:device", 10) == 0) {
-            snprintf(path, sizeof(path), "/sys/bus/iio/devices/%s/in_gravity_scale", entry->d_name);
-            if (access(path, R_OK) == 0 && gravity_dir[0] == '\0') {
-                snprintf(gravity_dir, gravity_len, "/sys/bus/iio/devices/%s", entry->d_name);
-            }
-        }
-    }
-    closedir(dir);
-}
+// Remove sysfs helpers and directory search
 
 void calibrate_gravity_offset(const char *gravity_dir) {
     const int samples = 100;
@@ -62,7 +21,7 @@ void calibrate_gravity_offset(const char *gravity_dir) {
     const char *axes[3] = {"x", "y", "z"};
     float gravity[3] = {0, 0, 0};
     float sum[3] = {0, 0, 0};
-    float gravity_scale = GRAVITY_SCALE;
+    float gravity_scale = 0.0000001f; // Use this scale instead of sysfs value
     float gravity_offset = 0;
     read_sysfs_float(gravity_dir, "in_gravity_offset", &gravity_offset);
     printf("\nCalibration: Point the glasses straight down and press Enter.\n");
@@ -91,55 +50,83 @@ void calibrate_gravity_offset(const char *gravity_dir) {
 
 int main() {
     signal(SIGINT, handle_sigint);
-    char gravity_dir[256] = "";
-    find_gravity_device_dir(gravity_dir, sizeof(gravity_dir));
-    if (gravity_dir[0] == '\0') {
-        fprintf(stderr, "Gravity IIO device not found.\n");
+    // --- libiio setup ---
+    struct iio_context *ctx = iio_create_default_context();
+    if (!ctx) {
+        fprintf(stderr, "Failed to create IIO context.\n");
         return 1;
     }
-    // --- Calibration step: uncomment to calibrate, then copy offset and remove ---
-    // calibrate_gravity_offset(gravity_dir);
-    float gravity_scale = GRAVITY_SCALE;
-    float gravity_offset = 0;
-    // Do not read sysfs scale, only offset if present
-    read_sysfs_float(gravity_dir, "in_gravity_offset", &gravity_offset);
-    int raw_gravity[3];
-    const char *axes[3] = {"x", "y", "z"};
-    float gravity[3];
-    // Forward vector (0,0,1)
-    float forward[3] = {0, 0, 1};
-    int was_in_range = 1; // Track if previously in range (<=50 deg)
-    while (!stop) {
-        for (int j = 0; j < 3; j++) {
-            read_gravity_raw(gravity_dir, axes[j], &raw_gravity[j]);
-            gravity[j] = raw_gravity[j] * gravity_scale + gravity_offset - GRAVITY_OFFSET[j];
+    struct iio_device *dev = NULL;
+    unsigned int dev_count = iio_context_get_devices_count(ctx);
+    for (unsigned int i = 0; i < dev_count; i++) {
+        dev = iio_context_get_device(ctx, i);
+        // Look for device with gravity_x channel
+        struct iio_channel *ch = iio_device_find_channel(dev, "gravity_x", false);
+        if (ch) break;
+        dev = NULL;
+    }
+    if (!dev) {
+        fprintf(stderr, "No IIO device with gravity_x channel found.\n");
+        iio_context_destroy(ctx);
+        return 1;
+    }
+    // Find gravity channels
+    struct iio_channel *gravity_ch[GRAVITY_CHANNELS];
+    for (int j = 0; j < GRAVITY_CHANNELS; j++) {
+        gravity_ch[j] = iio_device_find_channel(dev, GRAVITY_NAMES[j], false);
+        if (!gravity_ch[j]) {
+            fprintf(stderr, "Could not find channel %s\n", GRAVITY_NAMES[j]);
+            iio_context_destroy(ctx);
+            return 1;
         }
-        // Normalize vectors
+    }
+    // --- Main loop ---
+    float gravity[3];
+    float scale[3] = {0.0000001f, 0.0000001f, 0.0000001f};
+    float offset[3] = {0, 0, 0};
+    // Only read offset for each channel, not scale
+    for (int j = 0; j < GRAVITY_CHANNELS; j++) {
+        double o = 0;
+        if (iio_channel_attr_read_double(gravity_ch[j], "offset", &o) < 0) o = 0.0;
+        offset[j] = (float)o;
+    }
+    float forward[3] = {0, 0, 1};
+    int was_in_range = 1;
+    while (1) {
+        for (int j = 0; j < GRAVITY_CHANNELS; j++) {
+            double raw = 0;
+            if (iio_channel_attr_read_double(gravity_ch[j], "raw", &raw) < 0) {
+                fprintf(stderr, "Error reading raw for %s\n", GRAVITY_NAMES[j]);
+                raw = 0;
+            }
+            gravity[j] = (float)(raw * scale[j] + offset[j] - GRAVITY_OFFSET[j]);
+        }
         float gmag = sqrt(gravity[0]*gravity[0] + gravity[1]*gravity[1] + gravity[2]*gravity[2]);
-        float fmag = 1.0f; // already unit vector
+        float fmag = 1.0f;
         float dot = (gravity[0]*forward[0] + gravity[1]*forward[1] + gravity[2]*forward[2]) / (gmag * fmag);
-        // Clamp dot to [-1, 1] to avoid NaN from acos
         if (dot > 1.0f) dot = 1.0f;
         if (dot < -1.0f) dot = -1.0f;
         float angle_rad = acosf(dot);
         float angle_deg = angle_rad * 180.0f / M_PI;
         printf("\rGravity: [%.4f %.4f %.4f] | Magnitude: %.4f | Angle: %.2f deg   ", gravity[0], gravity[1], gravity[2], gmag, angle_deg);
-
         int in_range = (angle_deg <= 50.0f);
         if (in_range) {
             printf("Within range   ");
-	    system("echo \"LASER_ON\" > /tmp/hmdop_laser_pipe");
         } else {
             printf("Outside range   ");
             if (was_in_range) {
-                // Just left the range, trigger the command
-                system("echo \"LASER_OFF\" > /tmp/hmdop_laser_pipe");
+                int pipe_fd = open("/tmp/hmdop_laser_pipe", O_WRONLY | O_NONBLOCK);
+                if (pipe_fd >= 0) {
+                    const char *msg = "LASER_OFF\n";
+                    write(pipe_fd, msg, strlen(msg));
+                    close(pipe_fd);
+                }
             }
         }
         was_in_range = in_range;
-
         usleep(10000); // 10 ms (100Hz)
     }
+    iio_context_destroy(ctx);
     printf("\nStopping.\n");
     return 0;
 } 
