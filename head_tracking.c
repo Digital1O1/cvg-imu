@@ -8,6 +8,7 @@
 #include <math.h>
 #include <fcntl.h>
 #include <iio.h>
+#include <sys/stat.h>
 
 #define GRAVITY_CHANNELS 3
 static const char *GRAVITY_NAMES[GRAVITY_CHANNELS] = {"gravity_x_raw", "gravity_y_raw", "gravity_z_raw"};
@@ -41,7 +42,7 @@ void calibrate_gravity_offset(struct iio_device *dev, struct iio_channel **gravi
             gravity[j] = (float)(raw * scale[j] + offset[j]);
             sum[j] += gravity[j];
         }
-        usleep(10000); // 10 ms
+        usleep(20000); // 10 ms
     }
     float avg[3];
     for (int j = 0; j < 3; j++) avg[j] = sum[j] / samples;
@@ -102,7 +103,8 @@ int main() {
             if (!iio_channel_is_enabled(ch)) continue;
             void *data = iio_buffer_first(buf, ch);
             int32_t value = *(int32_t *)data;
-            gravity[g++] = value * 0.0000001f + GRAVITY_OFFSET[g]; // Use scale as before
+            gravity[g] = value * 0.0000001f - GRAVITY_OFFSET[g]; // Use scale as before
+	    g++;
         }
         float gmag = sqrt(gravity[0]*gravity[0] + gravity[1]*gravity[1] + gravity[2]*gravity[2]);
         float forward[3] = {0, 0, 1};
