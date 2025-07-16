@@ -1,64 +1,43 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -e
 
-if [[ $(id -u) -ne 0 ]]; then
-	echo "Please run as root (with sudo)"
-	exit 1
-fi
-
-DISTRO="buster"
-if [[ -e "/etc/os-release" ]]; then
-	DISTRO=$(cat /etc/os-release | grep VERSION_CODENAME | cut -d'=' -f2)
+# 1. Create the named FIFO pipe if it does not exist
+PIPE_PATH="/tmp/hmdop_laser_pipe"
+if [ ! -p "$PIPE_PATH" ]; then
+    echo "Creating FIFO pipe at $PIPE_PATH..."
+    mkfifo "$PIPE_PATH"
 else
-	echo "*** WARNING *** something don't smell right. Is this debian flavoured?"
-fi
-echo "THIS IS $DISTRO"
-
-echo "Creating iio group"
-groupadd iio
-
-echo "adding $(logname) to iio group"
-usermod -aG iio $(logname)
-
-echo "copying 90-iio.rules to /etc/udev/rules.d/"
-cp 90-iio.rules /etc/udev/rules.d/
-
-CONFIG_PATH="/boot/config.txt"
-OVERLAY_ENABLE="mpu9250,addr=0x68,int_pin=4"
-
-if [[ $DISTRO == "bookworm" ]]; then
-	CONFIG_PATH="/boot/firmware/config.txt"
-	OVERLAY_ENABLE="i2c-sensor,$OVERLAY_ENABLE"
-elif [[ $DISTRO == "bullseye" ]]; then
-	OVERLAY_ENABLE="i2c-sensor,$OVERLAY_ENABLE"
-elif [[ $DISTRO == "buster" ]]; then
-	if [[ -z $(which dtc) ]]; then
-		echo "device-tree-compiler not installed, installing now"
-		apt-get install -y device-tree-compiler
-	fi
-
-	echo "compiling dt overlay"
-	dtc -@ -Hepapr -I dts -O dtb -o mpu9250.dtbo mpu9250-overlay.dts
-
-	echo "moving mpu9250.dtbo to /boot/overlays/"
-	mv mpu9250.dtbo /boot/overlays/
-else 
-	echo "*** WARNING *** unsupported release. Thar be dragons afoot!"
+    echo "FIFO pipe $PIPE_PATH already exists."
 fi
 
-echo "adding device tree overlay enable to $CONFIG_PATH"
-echo "dtoverlay=$OVERLAY_ENABLE" | tee -a $CONFIG_PATH
-
-echo "Installing libiio + utils + python binding"
-apt-get install -y libiio-dev libiio-utils python3-libiio
-
-echo "Finished! Reboot required. Do you want to reboot now? [Y/n]"
-read response
-
-if [[ -n $response && !($response =~ ^[Yy]) ]]; then
-	echo "Okay then. That was always allowed."
-	exit 1
+# 2. Install necessary packages
+OS="$(uname)"
+echo "Detected OS: $OS"
+if [ "$OS" = "Darwin" ]; then
+    # macOS
+    if ! command -v brew >/dev/null 2>&1; then
+        echo "Homebrew not found. Please install Homebrew first."
+        exit 1
+    fi
+    echo "Installing libiio via Homebrew..."
+    brew install libiio || true
+    echo "Installing make and gcc via Homebrew..."
+    brew install make gcc || true
+else
+    # Assume Debian/Ubuntu
+    echo "Updating package list and installing libiio and build tools..."
+    sudo apt-get update
+    sudo apt-get install -y libiio-dev build-essential
 fi
 
-echo "Rebooting in 2 seconds"
-sleep 2
-systemctl reboot
+# 3. Compile head_tracking using Makefile
+if [ -f Makefile ]; then
+    echo "Compiling head_tracking using Makefile..."
+    make head_tracking
+    echo "Build complete."
+else
+    echo "Makefile not found! Please ensure you are in the correct directory."
+    exit 1
+fi
+
+echo "Setup complete."

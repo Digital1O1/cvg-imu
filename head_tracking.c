@@ -1,3 +1,5 @@
+// need to create pipe with `mkfifo /tmp/hmdop_laser_pipe`
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
