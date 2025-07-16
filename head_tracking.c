@@ -1,4 +1,4 @@
-// need to create pipe with `mkfifo /tmp/hmdop_laser_pipe`
+// tracks the direction the glasses are facing to turn the laser off when the glasses turn to look away from straight down
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,12 +16,21 @@ static const char *GRAVITY_NAMES[GRAVITY_CHANNELS] = {"gravity_x_raw", "gravity_
 static float GRAVITY_OFFSET[3] = {1.279940f, 0.227644f, -0.084857f};
 
 
-void calibrate_gravity_offset(struct iio_device *dev, struct iio_channel **gravity_ch) {
+void calibrate_gravity_offset(struct iio_device *dev) {
     const int samples = 100;
     float gravity[3] = {0, 0, 0};
     float sum[3] = {0, 0, 0};
     float scale[3] = {0.0000001f, 0.0000001f, 0.0000001f};
     float offset[3] = {0, 0, 0};
+    // Find gravity channels inside the function
+    struct iio_channel *gravity_ch[GRAVITY_CHANNELS];
+    for (int j = 0; j < GRAVITY_CHANNELS; j++) {
+        gravity_ch[j] = iio_device_find_channel(dev, GRAVITY_NAMES[j], false);
+        if (!gravity_ch[j]) {
+            fprintf(stderr, "Could not find channel %s\n", GRAVITY_NAMES[j]);
+            return;
+        }
+    }
     // Only read offset for each channel, not scale
     for (int j = 0; j < GRAVITY_CHANNELS; j++) {
         double o = 0;
@@ -42,7 +51,7 @@ void calibrate_gravity_offset(struct iio_device *dev, struct iio_channel **gravi
             gravity[j] = (float)(raw * scale[j] + offset[j]);
             sum[j] += gravity[j];
         }
-        usleep(20000); // 10 ms
+        usleep(20000); // 20 ms
     }
     float avg[3];
     for (int j = 0; j < 3; j++) avg[j] = sum[j] / samples;
@@ -91,6 +100,8 @@ int main() {
         return 1;
     }
     int was_in_range = 1;
+    // Uncomment the following line to run gravity offset calibration, then copy the output to GRAVITY_OFFSET and comment it again.
+    // calibrate_gravity_offset(dev);
     while (1) {
         ssize_t nbytes = iio_buffer_refill(buf);
         if (nbytes < 0) {
