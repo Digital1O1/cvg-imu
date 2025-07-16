@@ -15,23 +15,30 @@ static float GRAVITY_OFFSET[3] = {1.279940f, 0.227644f, -0.084857f};
 
 // Remove sysfs helpers and directory search
 
-void calibrate_gravity_offset(const char *gravity_dir) {
+void calibrate_gravity_offset(struct iio_device *dev, struct iio_channel **gravity_ch) {
     const int samples = 100;
-    int raw_gravity[3];
-    const char *axes[3] = {"x", "y", "z"};
     float gravity[3] = {0, 0, 0};
     float sum[3] = {0, 0, 0};
-    float gravity_scale = 0.0000001f; // Use this scale instead of sysfs value
-    float gravity_offset = 0;
-    read_sysfs_float(gravity_dir, "in_gravity_offset", &gravity_offset);
+    float scale[3] = {0.0000001f, 0.0000001f, 0.0000001f};
+    float offset[3] = {0, 0, 0};
+    // Only read offset for each channel, not scale
+    for (int j = 0; j < GRAVITY_CHANNELS; j++) {
+        double o = 0;
+        if (iio_channel_attr_read_double(gravity_ch[j], "offset", &o) < 0) o = 0.0;
+        offset[j] = (float)o;
+    }
     printf("\nCalibration: Point the glasses straight down and press Enter.\n");
     getchar();
     printf("Calibrating... Please hold still.\n");
     fflush(stdout);
     for (int i = 0; i < samples; i++) {
-        for (int j = 0; j < 3; j++) {
-            read_gravity_raw(gravity_dir, axes[j], &raw_gravity[j]);
-            gravity[j] = raw_gravity[j] * gravity_scale + gravity_offset;
+        for (int j = 0; j < GRAVITY_CHANNELS; j++) {
+            double raw = 0;
+            if (iio_channel_attr_read_double(gravity_ch[j], "raw", &raw) < 0) {
+                fprintf(stderr, "Error reading raw for %s\n", GRAVITY_NAMES[j]);
+                raw = 0;
+            }
+            gravity[j] = (float)(raw * scale[j] + offset[j]);
             sum[j] += gravity[j];
         }
         usleep(10000); // 10 ms
@@ -40,11 +47,16 @@ void calibrate_gravity_offset(const char *gravity_dir) {
     for (int j = 0; j < 3; j++) avg[j] = sum[j] / samples;
     // Expected gravity vector is [0, 0, 10] (down)
     float expected[3] = {0.0f, 0.0f, 10.0f};
-    float offset[3];
-    for (int j = 0; j < 3; j++) offset[j] = avg[j] - expected[j];
+    float out_offset[3];
+    for (int j = 0; j < 3; j++) out_offset[j] = avg[j] - expected[j];
     printf("\nCalibration complete. Use this for GRAVITY_OFFSET in your code:\n");
-    printf("static float GRAVITY_OFFSET[3] = {%.6ff, %.6ff, %.6ff};\n", offset[0], offset[1], offset[2]);
+    printf("static float GRAVITY_OFFSET[3] = {%.6ff, %.6ff, %.6ff};\n", out_offset[0], out_offset[1], out_offset[2]);
     printf("\nExiting calibration.\n");
+    exit(0);
+}
+
+void handle_sigint(int sig) {
+    printf("\nStopping.\n");
     exit(0);
 }
 
@@ -80,6 +92,8 @@ int main() {
             return 1;
         }
     }
+    // Optionally run calibration if requested (e.g., via command line arg)
+    // calibrate_gravity_offset(dev, gravity_ch);
     // --- Main loop ---
     float gravity[3];
     float scale[3] = {0.0000001f, 0.0000001f, 0.0000001f};
