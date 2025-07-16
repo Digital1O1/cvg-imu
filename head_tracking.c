@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <dirent.h>
+// #include <dirent.h> // Removed, not used
 #include <math.h>
 #include <fcntl.h>
 #include <iio.h>
@@ -14,7 +14,6 @@ static const char *GRAVITY_NAMES[GRAVITY_CHANNELS] = {"gravity_x_raw", "gravity_
 // Calibration: set to {0,0,0} initially, then update after calibration
 static float GRAVITY_OFFSET[3] = {1.279940f, 0.227644f, -0.084857f};
 
-// Remove sysfs helpers and directory search
 
 void calibrate_gravity_offset(struct iio_device *dev, struct iio_channel **gravity_ch) {
     const int samples = 100;
@@ -57,6 +56,13 @@ void calibrate_gravity_offset(struct iio_device *dev, struct iio_channel **gravi
 }
 
 int main() {
+    // Ensure the named pipe exists
+    if (access("/tmp/hmdop_laser_pipe", F_OK) == -1) {
+        if (mkfifo("/tmp/hmdop_laser_pipe", 0666) != 0) {
+            perror("Failed to create FIFO pipe");
+            return 1;
+        }
+    }
     // --- libiio setup ---
     struct iio_context *ctx = iio_create_default_context();
     if (!ctx) {
@@ -96,7 +102,7 @@ int main() {
             if (!iio_channel_is_enabled(ch)) continue;
             void *data = iio_buffer_first(buf, ch);
             int32_t value = *(int32_t *)data;
-            gravity[g++] = value * 0.0000001f; // Use scale as before
+            gravity[g++] = value * 0.0000001f + GRAVITY_OFFSET[g]; // Use scale as before
         }
         float gmag = sqrt(gravity[0]*gravity[0] + gravity[1]*gravity[1] + gravity[2]*gravity[2]);
         float forward[3] = {0, 0, 1};
