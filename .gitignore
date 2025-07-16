@@ -1,3 +1,22 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.d
+*.dSYM/
 
-*.DS_Store
-*.pdf
+# Executables
+head_tracking
+
+# Dependency files
+*.dep
+
+# Editor/OS files
+*~
+*.swp
+.DS_Store
+
+# Logs and pipes
+*.log
+*.out
+*.err

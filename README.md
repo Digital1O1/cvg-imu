@@ -1,160 +1,71 @@
-# IMU integration
+# Cancer Vision Goggles Head Tracking Safety System
 
-> I created a script `setup.sh` to quickly perform all of the procedures outlined in this README.
+This program uses libiio to access various sensors within the Epson Moverio BT-40 HMD over a USB connection and implements a safety feature for the Cancer Vision Goggles (CVG). The feature turns the lasers off when the user looks away from a defined field of view. The `head_tracking` program reads the 'gravity' device provided by the glasses to define two vectors: the direction the user is facing and the direction of the earth relative to the glasses (straight down). When the angle between these vectors is greater than 50° (i.e., the user looks too far from the ground), a command to turn the lasers off is written to a named pipe, which is read by the main CVG software.
 
-To ensure that the head mounted lasers are safetly used in the CVG system, we are implementing a safety shutoff feature utilizing an IMU.
+This program can be adjusted to work with other HMDs that support the IIO interface by modifying the libiio implementation. If no gravity vector is provided by the glasses, one can be calculated using the accelerometer, magnetometer, and gyroscope sensors. The program can also support any field of vision that can be defined mathematically using those two vectors; the 50-degree cone was chosen for simplicity.
 
-## Physical Connection
+## Configuration
 
-![Fritzing Schematic](./imgs/fritzing_mpu9250.png "Connection Diagram"){width=400}
+1. **Kernel Configuration:**
+   - The kernel must be configured to include the HID drivers. Recompile the kernel and, in the `.config` file, enable or modularize any component that starts with `HID_SENSOR_`.
+   - The most important for this application are:
+     - `HID_SENSOR_HUB`
+     - `HID_SENSOR_ACCEL`
+     - `HID_SENSOR_GYRO`
+     - `HID_SENSOR_MAGN`
+     - ...and their dependencies. Enabling the rest is also recommended.
 
-![Raspberry Pi Pinout](./imgs/raspberry-pi-pinout.png "RPi Pinout"){width=650}
+2. **Dependencies:**
+   - This program relies on the [libiio](https://github.com/analogdevicesinc/libiio) package.
+   - Install on Ubuntu/Debian:
+     ```sh
+     sudo apt-get install libiio-dev libiio-utils
+     ```
 
-> [!Note]
-> This device can be connected on on a different i2c bus or with a different interupt pin. If you wish to do so, ensure you adjust the variables passed to dtoverlay when defining the pin connections.
+3. **Named Pipe:**
+   - The program writes commands to `/tmp/hmdop_laser_pipe`. Ensure this named pipe exists and is being read by the main CVG software. The `head_tracking` executable will attempt to create it if it does not already exist.
+     ```sh
+     mkfifo /tmp/hmdop_laser_pipe
+     ```
 
-## Pin Definition
+## Building
 
-A device tree overlay for this sensor already already exists in the standard Raspbian linux images.
-Enabling this device requires a single line addition to `/boot/config.txt`
-
-Examples for device tree configuration can be found in the linux kernel's documentation.
-For example [https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/imu/invensense%2Cmpu6050.yaml](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/imu/invensense%2Cmpu6050.yaml)
-
-> [!TODO]
-> Add mounting matrix to our device tree
-
-> [!Note]
-> See: `/boot/overlays/README`
-
-### buster (oldoldstable; kernel 5.10.y)
-
-Modify the overlay for mpu6050 to configure the driver correctly.
-
-This device tree fragment can be compiled then moved to `/boot/overlays/`.
-
-```sh
-# I copied and renamed the file from a local git of the RPi linux kernel (you may copy&paste from github)
-scp ianzur@jasmine:~/Documents/projects/rpi-linux-5.10/arch/arm/boot/dts/overlays/mpu6050-overlay.dts mpu9250-overlay.dts
-
-# make the changes as show in file "mpu9250-overlay.dts", then compile
-dtc -@ -Hepapr -I dts -O dtb -o mpu9250.dtbo mpu9250-overlay.dts
-
-sudo mv mpu9250.dtbo /boot/overlays/
-# this gave me an error about how this move required permission changes, that is okay.
-
-# double checking that the file is there
-ls -la /boot/overlays/mpu*
-# should return:
-# -rwxr-xr-x 1 root root 841 Apr  8  2024 /boot/overlays/mpu6050.dtbo
-# -rwxr-xr-x 1 root root 841 Nov 25 16:50 /boot/overlays/mpu9250.dtbo
-```
-
-> [!Note]
-> Information regarding compiling device tree files can be found here.
-> [https://www.raspberrypi.com/documentation/computers/configuration.html#device-trees-overlays-and-parameters](https://www.raspberrypi.com/documentation/computers/configuration.html#device-trees-overlays-and-parameters)
-
-Now add the folling lines to `/boot/config.txt`
+To build the program, run:
 
 ```sh
-# load overlay for mpu9250 (Invensense)
-dtoverlay=mpu9250,addr=0x68,int_pin=4
+make head_tracking
 ```
 
-> [!Note]
-> The MPU9250 is an upgrade of the MPU6050 that includes a magnometer.
->
-> devicetree definition src: [https://github.com/raspberrypi/linux/blob/rpi-5.10.y/arch/arm/boot/dts/overlays/mpu6050-overlay.dts](https://github.com/raspberrypi/linux/blob/rpi-5.10.y/arch/arm/boot/dts/overlays/mpu6050-overlay.dts)
+This will produce the `head_tracking` executable.
 
-### bullseye (oldstable; kernel 6.1.y)
+## Usage
 
-Add the following lines to `/boot/config.txt`:
+Run the program with:
 
 ```sh
-# load overlay for mpu9250 (Invensense)
-dtoverlay=i2c-sensor,mpu9250,addr=0x68,int_pin=4
+./head_tracking
 ```
 
-> [!Note]
-> The definition of this device tree overlay has moved to a "common" file. The actual definition has not changed.
->
-> devicetree def src: [https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/i2c-sensor-common.dtsi](https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/i2c-sensor-common.dtsi)
+- When using in tandem with the CVG software, run both processes independently: `head_tracking` first then `hmdopapp`
+- The program will continuously monitor the head orientation and write `LASER_OFF` to the named pipe if the user looks outside the defined field of view (greater than 50° from straight down).
+- To change the field of view, modify the angle threshold in the source code.
 
-### bookworm (stable; kernel 6.6.y)
+## Calibration
 
-Add the following lines to `/boot/firmware/config.txt`:
+To calibrate the gravity offset:
+1. Uncomment the `calibrate_gravity_offset(dev);` line in `head_tracking.c` (in the main function, after the device is set up).
+2. Build and run the program. Follow the on-screen instructions to point the glasses straight down and press Enter.
+3. The program will print a new `GRAVITY_OFFSET` array. Copy this value into the source code, re-comment the calibration line, and rebuild.
 
-```sh
-# load overlay for mpu9250 (Invensense)
-dtoverlay=i2c-sensor,mpu9250,addr=0x68,int_pin=4
-```
+## Troubleshooting
 
-> devicetree definition src: [https://github.com/raspberrypi/linux/blob/rpi-6.6.y/arch/arm/boot/dts/overlays/i2c-sensor-common.dtsi](https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/i2c-sensor-common.dtsi)
+- **Buffer creation errors:** Ensure you are not creating multiple buffers for the same device at the same time. Run calibration before entering the main loop.
+- **Permission errors:** You may need to run as root or with `sudo` if you do not have access to the IIO device files.
+- **No gravity device found:** Make sure the HMD is connected and the kernel drivers are loaded.
+- **No output to pipe:** Ensure the named pipe exists and is being read by the main CVG software.
 
-## Driver
+## Adapting to Other Devices
 
-No additional configuration is required for the sensor to be detected and the driver loaded.
+- If your HMD does not provide a gravity vector, you can modify the code to compute it from the accelerometer, gyroscope, and magnetometer channels.
+- Adjust the field of view logic as needed for your application.
 
-> [!Note]
-> This can be confirmed with `lsmod | grep inv_mpu6050`
-
-But many of the virtual files created that one uses to access the device can only be modified by the root user. So some file permissions need to be changed to access the iio sysfs files without elevated permissions (sudo). This can be done with a udev rule.
-
-To maintain some security only users in the iio group may write to these files. Any user that needs to access these files should be added to the iio group `usermod -aG iio $USER`.
-
-> Note: if this group does not exist you may create it with `groupadd iio`
-
-/etc/udev/rules.d/90-iio.rules
-
-```
-# copy owner permissions to group (chmod g=u ...) change group to iio (chgrp iio)
-SUBSYSTEM=="iio", RUN+="/bin/sh -c 'chgrp -R iio /sys/bus/iio/devices/$kernel/ && chmod -R g=u /sys/bus/iio/devices/$kernel'"
-SUBSYSTEM=="iio", KERNEL=="iio:device*", RUN+="/bin/sh -c 'chgrp iio /dev/$kernel && chmod g=u /dev/$kernel'"
-```
-
-> [!Note]
-> udev documentation can be found all over but my favorite is here:
-> [https://documentation.suse.com/sles/12-SP5/html/SLES-all/cha-udev.html](https://documentation.suse.com/sles/12-SP5/html/SLES-all/cha-udev.html)
-
-> [!Note]
-> I have seen some kernel messages regarding a failed interrupt acknowledgment.
-> Further investigation may be required. Again, is this IC genuine?
->
-> ```sh
->  [  225.939990] inv-mpu6050-i2c 1-0068: failed to ack interrupt
->  pi@rpi:~/imu-integration $ uname -a
->  Linux rpi 6.12.0-v8-xcompile+ #1 SMP PREEMPT Sun Nov 24 20:19:32 CST 2024 aarch64 GNU/Linux
-> ```
-
-Invensense contributed the driver for this device to the industrialio subsystem of the linux kernel. The driver is compiled as a module into rpi's linux kernel by _default_.
-
-> For the curious: [https://github.com/torvalds/linux/tree/master/drivers/iio/imu/inv_mpu6050](https://github.com/torvalds/linux/tree/master/drivers/iio/imu/inv_mpu6050)
-
-#### What the hell is IIO?
-
-Industrial IO is a subsystem that was originally developed to communicate with sensors (specifically IMU's) by Jonathan Cameron for a wearables research project monitoring biomechanics of athletes.
-This subsystem utilizes sysfs (a virtual file system used by the kernel to expose devices and subsystems) to create a standard way to communicate with sensors.
-IIO's goal is to support almost any device that is an ADC or DAC with a consistent user-space interface.
-
-> [src - A presentation by James Cameron](https://www.youtube.com/watch?v=644oH1FXdtE)
-
-- You may directly read & write from the files in `/sys/bus/iio/devices/iio:deviceN/`
-- Several userspace libraries exist to interface a bit more cleanly with iio:
-  - [libiio (Analog Devices)](https://github.com/analogdevicesinc/libiio)
-    - written in c, with python bindings
-    - maintains a userspace library to connect to the iio subsystem
-    - Additional userspace tools for debugging industrial stuff install libiio-utils (`apt install libiio-utils`)
-    - TODO: Try github main (v1.0) also
-  - sensor-proxy-iio
-    - I haven't investigated this library
-  - probably others
-    - and we can roll our own. Especially since our application does not require high speed.
-
-### Reading from the Sensor
-
-I created two example scripts to verify reading from the sensor, both do the exact same thing. Both these scripts can be translated to c/c++.
-
-- direct_mpu9250_read.py
-  - this script reads and modifies the sysfs files directly using only standard (builtin) python libraries.
-- libiio_mpu9250_read.py
-  - this script uses libiio to access the sysfs files associated with the mpu9250.
