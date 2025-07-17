@@ -2,8 +2,6 @@
 
 CC = gcc
 CFLAGS = -Wall -g
-LDFLAGS_SENDER = -liio -lm -lrt
-LDFLAGS_RECEIVER =
 TARGETS = head_tracking ./testing/rocking_test
 
 all: $(TARGETS)
@@ -15,4 +13,4 @@ clean:
 	rm -f head_tracking ./testing/rocking_test
 
 ./testing/rocking_test: ./testing/rocking_test.c
-	$(CC) $(CFLAGS) ./testing/rocking_test.c -o ./testing/rocking_test
+	$(CC) $(CFLAGS) ./testing/rocking_test.c -o ./testing/rocking_test -lm -liio
