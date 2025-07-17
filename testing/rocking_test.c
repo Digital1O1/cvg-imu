@@ -13,13 +13,6 @@
 static float GRAVITY_OFFSET[3] = {1.279940f, 0.227644f, -0.084857f};
 
 int main() {
-    // Ensure the named pipe exists
-    if (access("/tmp/hmdop_laser_pipe", F_OK) == -1) {
-        if (mkfifo("/tmp/hmdop_laser_pipe", 0666) != 0) {
-            perror("Failed to create FIFO pipe");
-            return 1;
-        }
-    }
     // --- libiio setup ---
     struct iio_context *ctx = iio_create_default_context();
     if (!ctx) {
@@ -53,82 +46,103 @@ int main() {
         iio_context_destroy(ctx);
         return 1;
     }
-    fprintf(csv, "timestamp_ms,angle_deg,direction\n");
+    fprintf(csv, "timestamp_ms,angle_deg,direction,raw_gravity_x,raw_gravity_y,raw_gravity_z,gravity_x,gravity_y,gravity_z,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,magn_x,magn_y,magn_z\n");
     fflush(csv);
     float angle_history[7] = {0};
     int history_idx = 0;
     int direction = 1; // 1 for right, -1 for left, alternates at each peak
     struct timespec last_peak_time = {0, 0};
     const long min_peak_interval_ms = 200; // 200 ms debounce
+    int32_t raw_gravity[3] = {0};
+    float gravity[3] = {0}; 
+    // --- Find and setup accel_3d, gyro_3d, magn_3d devices ---
+    struct iio_device *accel_dev = iio_context_find_device(ctx, "accel_3d");
+    struct iio_device *gyro_dev  = iio_context_find_device(ctx, "gyro_3d");
+    struct iio_device *magn_dev  = iio_context_find_device(ctx, "magn_3d");
+    struct iio_channel *accel_ch[3] = {NULL}, *gyro_ch[3] = {NULL}, *magn_ch[3] = {NULL};
+    struct iio_buffer *accel_buf = NULL, *gyro_buf = NULL, *magn_buf = NULL;
+    float accel[3] = {0}, gyro[3] = {0}, magn[3] = {0};
+    const char *axes[3] = {"x", "y", "z"};
+    // Helper macro to setup device, channels, and buffer
+    #define SETUP_3D_DEV(dev, ch_arr, buf) \
+        if (dev) { \
+            for (int j = 0; j < 3; j++) { \
+                char chname[32]; \
+                snprintf(chname, sizeof(chname), "%s_%s", \
+                    strstr(iio_device_get_name(dev), "accel") ? "accel" : \
+                    strstr(iio_device_get_name(dev), "gyro") ? "anglvel" : "magn", axes[j]); \
+                ch_arr[j] = iio_device_find_channel(dev, chname, false); \
+                if (ch_arr[j]) iio_channel_enable(ch_arr[j]); \
+            } \
+            buf = iio_device_create_buffer(dev, 1, false); \
+        }
+    SETUP_3D_DEV(accel_dev, accel_ch, accel_buf);
+    SETUP_3D_DEV(gyro_dev,  gyro_ch,  gyro_buf);
+    SETUP_3D_DEV(magn_dev,  magn_ch,  magn_buf);
+    // Remove peak detection logic, log every 500 ms
+    struct timespec last_log_time = {0, 0};
+    clock_gettime(CLOCK_MONOTONIC, &last_log_time);
     while (1) {
         ssize_t nbytes = iio_buffer_refill(buf);
         if (nbytes < 0) {
             fprintf(stderr, "Buffer refill failed: %zd\n", nbytes);
             break;
         }
-        float gravity[3] = {0};
         for (unsigned int i = 0, g = 0; i < num_channels && g < 3; i++) {
             struct iio_channel *ch = iio_device_get_channel(dev, i);
             if (!iio_channel_is_enabled(ch)) continue;
             void *data = iio_buffer_first(buf, ch);
             int32_t value = *(int32_t *)data;
-            gravity[g] = value * 0.0000001f - GRAVITY_OFFSET[g]; // Use scale as before
-      	    g++;
+            raw_gravity[g] = value;
+            gravity[g] = value * 0.0000001f - GRAVITY_OFFSET[g];
+            g++;
         }
-        float gmag = sqrt(gravity[0]*gravity[0] + gravity[1]*gravity[1] + gravity[2]*gravity[2]);
-        float forward[3] = {0, 0, 1};
-        float fmag = 1.0f;
-        float dot = (gravity[0]*forward[0] + gravity[1]*forward[1] + gravity[2]*forward[2]) / (gmag * fmag);
-        if (dot > 1.0f) dot = 1.0f;
-        if (dot < -1.0f) dot = -1.0f;
-        float angle_rad = acosf(dot);
-        float angle_deg = angle_rad * 180.0f / M_PI;
-        // --- Peak detection logic (window of 7) ---
-        angle_history[history_idx % 7] = angle_deg;
-        history_idx++;
-        int have_window = history_idx >= 7;
-        int peak_detected = 0;
-        if (have_window) {
-            // Indices for 7-value window
-            int c = (history_idx - 4) % 7; // center
-            float center = angle_history[c];
-            int is_peak = 1;
-            for (int offset = -3; offset <= 3; offset++) {
-                if (offset == 0) continue;
-                int idx = (history_idx - 4 + offset + 7) % 7;
-                if (center <= angle_history[idx]) {
-                    is_peak = 0;
-                    break;
-                }
-            }
-            if (is_peak && center > 10.0f) {
-                // Debounce: check time since last peak
-                struct timespec now;
-                clock_gettime(CLOCK_MONOTONIC, &now);
-                long elapsed_ms = (now.tv_sec - last_peak_time.tv_sec) * 1000 + (now.tv_nsec - last_peak_time.tv_nsec) / 1000000;
-                if (elapsed_ms > min_peak_interval_ms) {
-                    peak_detected = 1;
-                    last_peak_time = now;
-                }
-            }
-        }
-        if (peak_detected) {
-            // Get timestamp in ms since epoch
+        // Read accel, gyro, magn scaled values
+        #define READ_3D_BUF(dev, buf, ch_arr, arr) \
+            if (dev && buf && iio_buffer_refill(buf) >= 0) { \
+                for (int j = 0; j < 3; j++) { \
+                    if (ch_arr[j]) { \
+                        void *data = iio_buffer_first(buf, ch_arr[j]); \
+                        int32_t raw = *(int32_t *)data; \
+                        double scale = 1, offset = 0; \
+                        iio_channel_attr_read_double(ch_arr[j], "scale", &scale); \
+                        iio_channel_attr_read_double(ch_arr[j], "offset", &offset); \
+                        arr[j] = raw * scale + offset; \
+                    } else { arr[j] = 0; } \
+                } \
+            } else { arr[0]=arr[1]=arr[2]=0; }
+        READ_3D_BUF(accel_dev, accel_buf, accel_ch, accel);
+        READ_3D_BUF(gyro_dev,  gyro_buf,  gyro_ch,  gyro);
+        READ_3D_BUF(magn_dev,  magn_buf,  magn_ch,  magn);
+        // Log every 500 ms
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long elapsed_ms = (now.tv_sec - last_log_time.tv_sec) * 1000 + (now.tv_nsec - last_log_time.tv_nsec) / 1000000;
+        if (elapsed_ms >= 500) {
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
             long long timestamp_ms = (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
-            int c = (history_idx - 4) % 7;
-            float peak_angle = angle_history[c];
-            // format is milliseconds, degrees, direction
-            fprintf(csv, "%lld,%.2f,%d\n", timestamp_ms, peak_angle, direction);
+            // format is milliseconds, angle, direction, raw_gravity_x, raw_gravity_y, raw_gravity_z, gravity_x, gravity_y, gravity_z, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, magn_x, magn_y, magn_z
+            float gmag = sqrt(gravity[0]*gravity[0] + gravity[1]*gravity[1] + gravity[2]*gravity[2]);
+            float forward[3] = {0, 0, 1};
+            float fmag = 1.0f;
+            float dot = (gravity[0]*forward[0] + gravity[1]*forward[1] + gravity[2]*forward[2]) / (gmag * fmag);
+            if (dot > 1.0f) dot = 1.0f;
+            if (dot < -1.0f) dot = -1.0f;
+            float angle_rad = acosf(dot);
+            float angle_deg = angle_rad * 180.0f / M_PI;
+            fprintf(csv, "%lld,%.2f,0,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n", timestamp_ms, angle_deg, raw_gravity[0], raw_gravity[1], raw_gravity[2], gravity[0], gravity[1], gravity[2], accel[0], accel[1], accel[2], gyro[0], gyro[1], gyro[2], magn[0], magn[1], magn[2]);
             fflush(csv);
-            direction *= -1; // Alternate direction
+            last_log_time = now;
         }
-       usleep(10000); // 10 ms (100Hz)
+        usleep(10000); // 10 ms (100Hz)
     }
     fclose(csv);
     iio_buffer_destroy(buf);
     iio_context_destroy(ctx);
+    if (accel_buf) iio_buffer_destroy(accel_buf);
+    if (gyro_buf)  iio_buffer_destroy(gyro_buf);
+    if (magn_buf)  iio_buffer_destroy(magn_buf);
     printf("\nStopping.\n");
     return 0;
 } 
