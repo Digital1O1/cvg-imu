@@ -2,12 +2,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <math.h>
-#include <fcntl.h>
 #include <iio.h>
-#include <sys/stat.h>
 #include <time.h>
 
 static float GRAVITY_OFFSET[3] = {1.279940f, 0.227644f, -0.084857f};
@@ -46,15 +43,10 @@ int main() {
         iio_context_destroy(ctx);
         return 1;
     }
-    fprintf(csv, "timestamp_ms,angle_deg,direction,raw_gravity_x,raw_gravity_y,raw_gravity_z,gravity_x,gravity_y,gravity_z,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,magn_x,magn_y,magn_z\n");
+    fprintf(csv, "timestamp_ms,angle_deg,raw_gravity_x,raw_gravity_y,raw_gravity_z,gravity_x,gravity_y,gravity_z,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,magn_x,magn_y,magn_z\n");
     fflush(csv);
-    float angle_history[7] = {0};
-    int history_idx = 0;
-    int direction = 1; // 1 for right, -1 for left, alternates at each peak
-    struct timespec last_peak_time = {0, 0};
-    const long min_peak_interval_ms = 200; // 200 ms debounce
     int32_t raw_gravity[3] = {0};
-    float gravity[3] = {0}; 
+    float gravity[3] = {0};
     // --- Find and setup accel_3d, gyro_3d, magn_3d devices ---
     struct iio_device *accel_dev = iio_context_find_device(ctx, "accel_3d");
     struct iio_device *gyro_dev  = iio_context_find_device(ctx, "gyro_3d");
@@ -62,7 +54,6 @@ int main() {
     struct iio_channel *accel_ch[3] = {NULL}, *gyro_ch[3] = {NULL}, *magn_ch[3] = {NULL};
     struct iio_buffer *accel_buf = NULL, *gyro_buf = NULL, *magn_buf = NULL;
     float accel[3] = {0}, gyro[3] = {0}, magn[3] = {0};
-    const char *axes[3] = {"x", "y", "z"};
     // Helper macro to setup device, channels, and buffer
     #define SETUP_3D_DEV(dev, ch_arr, buf) \
         if (dev) { \
@@ -70,7 +61,8 @@ int main() {
                 char chname[32]; \
                 snprintf(chname, sizeof(chname), "%s_%s", \
                     strstr(iio_device_get_name(dev), "accel") ? "accel" : \
-                    strstr(iio_device_get_name(dev), "gyro") ? "anglvel" : "magn", axes[j]); \
+                    strstr(iio_device_get_name(dev), "gyro") ? "anglvel" : "magn", \
+                    (j == 0 ? "x" : (j == 1 ? "y" : "z"))); \
                 ch_arr[j] = iio_device_find_channel(dev, chname, false); \
                 if (ch_arr[j]) iio_channel_enable(ch_arr[j]); \
             } \
@@ -79,7 +71,6 @@ int main() {
     SETUP_3D_DEV(accel_dev, accel_ch, accel_buf);
     SETUP_3D_DEV(gyro_dev,  gyro_ch,  gyro_buf);
     SETUP_3D_DEV(magn_dev,  magn_ch,  magn_buf);
-    // Remove peak detection logic, log every 500 ms
     struct timespec last_log_time = {0, 0};
     clock_gettime(CLOCK_MONOTONIC, &last_log_time);
     while (1) {
@@ -122,16 +113,13 @@ int main() {
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
             long long timestamp_ms = (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
-            // format is milliseconds, angle, direction, raw_gravity_x, raw_gravity_y, raw_gravity_z, gravity_x, gravity_y, gravity_z, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, magn_x, magn_y, magn_z
             float gmag = sqrt(gravity[0]*gravity[0] + gravity[1]*gravity[1] + gravity[2]*gravity[2]);
-            float forward[3] = {0, 0, 1};
-            float fmag = 1.0f;
-            float dot = (gravity[0]*forward[0] + gravity[1]*forward[1] + gravity[2]*forward[2]) / (gmag * fmag);
+            float dot = gravity[2] / gmag;
             if (dot > 1.0f) dot = 1.0f;
             if (dot < -1.0f) dot = -1.0f;
             float angle_rad = acosf(dot);
             float angle_deg = angle_rad * 180.0f / M_PI;
-            fprintf(csv, "%lld,%.2f,0,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n", timestamp_ms, angle_deg, raw_gravity[0], raw_gravity[1], raw_gravity[2], gravity[0], gravity[1], gravity[2], accel[0], accel[1], accel[2], gyro[0], gyro[1], gyro[2], magn[0], magn[1], magn[2]);
+            fprintf(csv, "%lld,%.2f,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n", timestamp_ms, angle_deg, raw_gravity[0], raw_gravity[1], raw_gravity[2], gravity[0], gravity[1], gravity[2], accel[0], accel[1], accel[2], gyro[0], gyro[1], gyro[2], magn[0], magn[1], magn[2]);
             fflush(csv);
             last_log_time = now;
         }
