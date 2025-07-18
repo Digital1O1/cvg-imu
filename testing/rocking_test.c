@@ -1,5 +1,4 @@
-// tracks the direction the glasses are facing to turn the laser off when the glasses turn to look away from straight down
-
+// ran for ~3 hours
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -106,11 +105,11 @@ int main() {
         READ_3D_BUF(accel_dev, accel_buf, accel_ch, accel);
         READ_3D_BUF(gyro_dev,  gyro_buf,  gyro_ch,  gyro);
         READ_3D_BUF(magn_dev,  magn_buf,  magn_ch,  magn);
-        // Log every 500 ms
+        // Log every 100 ms
         struct timespec now;
         clock_gettime(CLOCK_MONOTONIC, &now);
         long elapsed_ms = (now.tv_sec - last_log_time.tv_sec) * 1000 + (now.tv_nsec - last_log_time.tv_nsec) / 1000000;
-        if (elapsed_ms >= 500) {
+        if (elapsed_ms >= 100) {
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
             long long timestamp_ms = (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;

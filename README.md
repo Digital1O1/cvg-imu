@@ -2,7 +2,7 @@
 
 This program uses libiio to access various sensors within the Epson Moverio BT-40 HMD over a USB connection and implements a safety feature for the Cancer Vision Goggles (CVG). The feature turns the lasers off when the user looks away from a defined field of view. The `head_tracking` program reads the 'gravity' device provided by the glasses to define two vectors: the direction the user is facing and the direction of the earth relative to the glasses (straight down). When the angle between these vectors is greater than 50° (i.e., the user looks too far from the ground), a command to turn the lasers off is written to a named pipe, which is read by the main CVG software.
 
-This program can be adjusted to work with other HMDs that support the IIO interface by modifying the libiio implementation. If no gravity vector is provided by the glasses, one can be calculated using the accelerometer, magnetometer, and gyroscope sensors. The program can also support any field of vision that can be defined mathematically using those two vectors; the 50-degree cone was chosen for simplicity.
+This program can be adjusted to work with other HMDs/IMUs that support the IIO interface by modifying the libiio implementation. If no gravity vector is provided by the glasses, one can be calculated using the accelerometer, magnetometer, and gyroscope sensors. The program can also support any field of vision that can be defined mathematically using those two vectors; the 50-degree cone was chosen for simplicity.
 
 ## Configuration
 
