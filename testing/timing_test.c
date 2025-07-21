@@ -37,7 +37,7 @@ int main() {
     fclose(f);
 
     // Prepare CSV file
-    FILE *csv = fopen("testing/timing_test.csv", "a");
+    FILE *csv = fopen("./timing_test.csv", "a");
     if (!csv) { perror("Open CSV"); return 1; }
     // Write header if file is empty
     fseek(csv, 0, SEEK_END);
