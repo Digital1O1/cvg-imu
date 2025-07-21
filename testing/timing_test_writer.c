@@ -30,7 +30,7 @@ int main() {
         struct timeval tv;
         gettimeofday(&tv, NULL);
         long long ms = (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
-        *logf = fopen("./send_time.csv", "a");
+        logf = fopen("./send_time.csv", "a");
         if (logf) {
             fprintf(logf, "%lld\n", ms);
             fclose(logf);

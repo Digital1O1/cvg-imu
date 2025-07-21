@@ -10,6 +10,7 @@ head_tracking
 rocking_test
 consistency_test
 timing_test
+timing_test_writer
 
 # Dependency files
 *.dep
