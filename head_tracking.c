@@ -138,15 +138,6 @@ int main() {
                     const char *msg = "LASER_OFF\n";
                     write(pipe_fd, msg, strlen(msg));
                     close(pipe_fd);
-                    // Log timestamp to testing/send_time.csv for testing purposes
-                    struct timeval tv;
-                    gettimeofday(&tv, NULL);
-                    long long ms = (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
-                    FILE *logf = fopen("testing/send_time.csv", "a");
-                    if (logf) {
-                        fprintf(logf, "%lld\n", ms);
-                        fclose(logf);
-                    }
                 }
               }
         }

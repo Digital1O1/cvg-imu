@@ -25,4 +25,3 @@ timing_test
 *.err
 
 # Other
-freq_test.py

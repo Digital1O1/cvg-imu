@@ -2,7 +2,7 @@
 
 CC = gcc
 CFLAGS = -Wall -g
-TARGETS = head_tracking ./testing/rocking_test ./testing/consistency_test
+TARGETS = head_tracking ./testing/rocking_test ./testing/consistency_test ./testing/timing_test ./testing/timing_test_writer
 
 all: $(TARGETS)
 
@@ -18,6 +18,8 @@ head_tracking: head_tracking.c
 ./testing/timing_test: ./testing/timing_test.c
 	$(CC) $(CFLAGS) ./testing/timing_test.c -o ./testing/timing_test
 
+./testing/timing_test_writer: ./testing/timing_test_writer.c
+	$(CC) $(CFLAGS) ./testing/timing_test_writer.c -o ./testing/timing_test_writer
 
 
 clean:
