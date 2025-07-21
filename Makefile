@@ -15,5 +15,9 @@ head_tracking: head_tracking.c
 ./testing/consistency_test: ./testing/consistency_test.c
 	$(CC) $(CFLAGS) ./testing/consistency_test.c -o ./testing/consistency_test
 
+./testing/timing_test: ./testing/timing_test.c
+	$(CC) $(CFLAGS) ./testing/timing_test.c -o ./testing/timing_test
+
+
 clean:
 	rm -f  head_tracking ./testing/rocking_test ./testing/consistency_test

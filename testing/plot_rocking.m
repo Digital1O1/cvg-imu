@@ -1,5 +1,5 @@
 % Read the CSV file
-data = readtable('rocking_peaks.csv');
+data = readtable('rocking_test.csv');
 
 % Compute time since start (in seconds)
 time_s = (data.timestamp_ms - data.timestamp_ms(1)) / 1000;

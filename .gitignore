@@ -8,6 +8,8 @@
 # Executables
 head_tracking
 rocking_test
+consistency_test
+timing_test
 
 # Dependency files
 *.dep
@@ -21,3 +23,6 @@ rocking_test
 *.log
 *.out
 *.err
+
+# Other
+freq_test.py
