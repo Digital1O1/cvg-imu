@@ -25,8 +25,6 @@ int main() {
     }
 
     char buffer[BUFFER_SIZE];
-    struct timeval first_time = {0, 0};
-    int first_found = 0;
     while (1) {
         ssize_t n = read(fd, buffer, BUFFER_SIZE - 1);
         if (n > 0) {

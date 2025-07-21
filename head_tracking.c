@@ -127,7 +127,7 @@ int main() {
         float angle_rad = acosf(dot);
         float angle_deg = angle_rad * 180.0f / M_PI;
         printf("\rGravity: [%.4f %.4f %.4f] | Magnitude: %.4f | Angle: %.2f deg   ", gravity[0], gravity[1], gravity[2], gmag, angle_deg);
-        int in_range = (angle_deg <= 50.0f);
+        int in_range = (angle_deg <= 90.0f);
         if (in_range) {
             printf("Within range   ");
         } else {
@@ -138,7 +138,7 @@ int main() {
                     const char *msg = "LASER_OFF\n";
                     write(pipe_fd, msg, strlen(msg));
                     close(pipe_fd);
-                    // Log timestamp to testing/send_time.csv
+                    // Log timestamp to testing/send_time.csv for testing purposes
                     struct timeval tv;
                     gettimeofday(&tv, NULL);
                     long long ms = (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
