@@ -12,6 +12,11 @@
 
 int main() {
     int pipe_fd;
+    FILE *logf = fopen("./send_time.csv", "a");
+    fseek(logf, 0, SEEK_END);
+    if (ftell(logf) == 0) fprintf(logf, "timestamp_ms\n");
+    fclose(logf);
+
     while (1) {
         pipe_fd = open(PIPE_PATH, O_WRONLY | O_NONBLOCK);
         if (pipe_fd >= 0) {
@@ -25,7 +30,7 @@ int main() {
         struct timeval tv;
         gettimeofday(&tv, NULL);
         long long ms = (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
-        FILE *logf = fopen("./send_time.csv", "a");
+        *logf = fopen("./send_time.csv", "a");
         if (logf) {
             fprintf(logf, "%lld\n", ms);
             fclose(logf);
