@@ -44,7 +44,7 @@ int main() {
     if (ftell(csv) == 0) fprintf(csv, "timestamp_ms\n");
     fclose(csv);
 
-    printf("Monitoring GPIO%d for HIGH signal. Logging to testing/timing_test.csv.\n", GPIO_PIN);
+    printf("Monitoring GPIO%d for HIGH signal. Logging to ./timing_test.csv.\n", GPIO_PIN);
 
     while (1) {
         f = fopen(gpio_val_path, "r");
@@ -54,7 +54,7 @@ int main() {
         if (val == 1 && last_state == 0) { // Rising edge
             gettimeofday(&tv, NULL);
             ms = (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
-            csv = fopen("testing/timing_test.csv", "a");
+            csv = fopen("./timing_test.csv", "a");
             if (csv) {
                 fprintf(csv, "%lld\n", ms);
                 fclose(csv);
