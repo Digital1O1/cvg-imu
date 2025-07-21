@@ -60,6 +60,15 @@ int main() {
                 fclose(csv);
             }
             printf("HIGH detected at %lld ms\n", ms);
+
+            // Set GPIO to output and write LOW
+            f = fopen(gpio_dir_path, "w");
+            if (f) { fprintf(f, "out"); fclose(f); }
+            f = fopen(gpio_val_path, "w");
+            if (f) { fprintf(f, "0"); fclose(f); }
+            // Set GPIO back to input
+            f = fopen(gpio_dir_path, "w");
+            if (f) { fprintf(f, "in"); fclose(f); }
         }
         last_state = val;
         usleep(10000); // 10 ms
