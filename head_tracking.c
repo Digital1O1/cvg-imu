@@ -127,7 +127,7 @@ int main() {
         float angle_rad = acosf(dot);
         float angle_deg = angle_rad * 180.0f / M_PI;
         printf("\rGravity: [%.4f %.4f %.4f] | Magnitude: %.4f | Angle: %.2f deg   ", gravity[0], gravity[1], gravity[2], gmag, angle_deg);
-        int in_range = (angle_deg <= 90.0f);
+        int in_range = (angle_deg <= 60.0f);
         if (in_range) {
             printf("Within range   ");
         } else {
