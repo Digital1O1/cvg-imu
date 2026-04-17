@@ -1,7 +1,7 @@
 # Makefile
 
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -liio -lm
 BUILD_DIR = build
 TARGETS = $(BUILD_DIR)/head_tracking $(BUILD_DIR)/rocking_test $(BUILD_DIR)/consistency_test $(BUILD_DIR)/timing_test $(BUILD_DIR)/timing_test_writer
 

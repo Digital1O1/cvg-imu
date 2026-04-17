@@ -4,6 +4,10 @@ This program uses libiio to access various sensors within the Epson Moverio BT-4
 
 This program can be adjusted to work with other HMDs/IMUs that support the IIO interface by modifying the libiio implementation. If no gravity vector is provided by the glasses, one can be calculated using the accelerometer, magnetometer, and gyroscope sensors. The program can also support any field of vision that can be defined mathematically using those two vectors; the 50-degree cone was chosen for simplicity.
 
+## Reading references 
+### LibIIO documentation
+[Here](https://analogdevicesinc.github.io/libiio/v0.24/index.html)
+
 ## Configuration
 
 1. **Kernel Configuration:**
@@ -15,18 +19,88 @@ This program can be adjusted to work with other HMDs/IMUs that support the IIO i
      - `HID_SENSOR_MAGN`
      - ...and their dependencies. Enabling the rest is also recommended.
 
+1.1 **Updating `source.list` due to Buster OS** 
+    - Edit `sources.list` 
+        - Command : `sudo nano /etc/apt/sources.list`
+
+1.2 **Rebuilding the kernel for Industiral IIO**
+    - Steps taken so far 
+        - Download source onto machine that's going to do the cross compiling : `git clone https://github.com/raspberrypi/linux`
+            - Testing different branches : `git  branch -a`
+                - rpi-5.4.y 
+                    - Apparently closest to 'true buster-era' kernel
+                - rpi-5.10.y(LTS)  
+                    - Best balance?
+                    - Going to test this out first 
+                        - : Command : `git checkout rpi-5.10.y`
+                - rpi6.1.y 
+                    - If newer IIO drivers are needed
+        
+    - Info about busterOS
+        - Kernel version : 5.10.103-v7l 
+        - System architecture -m : arm7l
+
+1.3 **Commands used so far**
+- ~~On compiling machine~~ 
+- This was done natively since I'm still figuring out how to cross compile
+
+```bash
+
+# Dependencies
+sudo apt install bc bison flex libssl-dev make libc6-dev libncurses5-dev
+sudo apt install crossbuild-essential-arm64   # 64-bit
+
+
+git clone https://github.com/raspberrypi/linux
+git checkout rpi-5.10.y
+
+
+cd linux
+KERNEL=kernel7l
+make bcm2711_defconfig
+
+# Install graphical config GUI and add industrial IIO support
+make menuconfig
+
+# While in menuconfig, press '/' and search for the following items and enable them 
+# HID_SENSOR_HUB
+# HID_SENSOR_ACCEL
+# HID_SENSOR_GYRO
+# HID_SENSOR_MAGN
+
+# Build 32bit kernel 
+make -j6 zImage modules dtbs
+
+# Install the kernel 
+sudo make -j6 modules_install
+
+# Create backup of current kernel 
+sudo cp /boot/kernel7l.img /boot/kernel7l-backup.img
+
+# Install new kernel image
+sudo cp arch/arm/boot/zImage /boot/kernel7l.img
+```
+
+1.4 **Sanity check**
+- Use the following commands to ensure iio was installed correctly
+    - To check iio devices : `ls /sys/bus/iio/devices/`
+    - Check present USB devices : `lsusb` 
+
+
+
 2. **Dependencies:**
    - This program relies on the [libiio](https://github.com/analogdevicesinc/libiio) package.
    - Install on Ubuntu/Debian:
-     ```sh
-     sudo apt-get install libiio-dev libiio-utils
-     ```
+   ```sh
+   sudo apt-get install libiio-dev libiio-utils
+   ```
+
 
 3. **Named Pipe:**
-   - The program writes commands to `/tmp/hmdop_laser_pipe`. Ensure this named pipe exists and is being read by the main CVG software. The `head_tracking` executable will attempt to create it if it does not already exist.
-     ```sh
-     mkfifo /tmp/hmdop_laser_pipe
-     ```
+- The program writes commands to `/tmp/hmdop_laser_pipe`. Ensure this named pipe exists and is being read by the main CVG software. The `head_tracking` executable will attempt to create it if it does not already exist.
+```sh
+mkfifo /tmp/hmdop_laser_pipe
+```
 
 ## Building
 
@@ -53,9 +127,9 @@ Run the program with:
 ## Calibration
 
 To calibrate the gravity offset:
-1. Uncomment the `calibrate_gravity_offset(dev);` line in `head_tracking.c` (in the main function, after the device is set up).
-2. Build and run the program. Follow the on-screen instructions to point the glasses straight down and press Enter.
-3. The program will print a new `GRAVITY_OFFSET` array. Copy this value into the source code, re-comment the calibration line, and rebuild.
+    1. Uncomment the `calibrate_gravity_offset(dev);` line in `head_tracking.c` (in the main function, after the device is set up).
+    2. Build and run the program. Follow the on-screen instructions to point the glasses straight down and press Enter.
+    3. The program will print a new `GRAVITY_OFFSET` array. Copy this value into the source code, re-comment the calibration line, and rebuild.
 
 ## Troubleshooting
 
@@ -68,4 +142,3 @@ To calibrate the gravity offset:
 
 - If your HMD does not provide a gravity vector, you can modify the code to compute it from the accelerometer, gyroscope, and magnetometer channels.
 - Adjust the field of view logic as needed for your application.
-

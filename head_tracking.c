@@ -73,6 +73,9 @@ int main() {
             perror("Failed to create FIFO pipe");
             return 1;
         }
+
+        printf("Pipe exists\r\n");
+
     }
     // --- libiio setup ---
     struct iio_context *ctx = iio_create_default_context();
@@ -80,19 +83,24 @@ int main() {
         fprintf(stderr, "Failed to create IIO context.\n");
         return 1;
     }
+    printf("IIO Context created \r\n");
     struct iio_device *dev = iio_context_find_device(ctx, "gravity");
     if (!dev) {
         fprintf(stderr, "Could not find gravity device.\n");
         iio_context_destroy(ctx);
         return 1;
     }
+
+    printf("Gravity device found/created \r\n");
     // Enable all gravity channels
     unsigned int num_channels = iio_device_get_channels_count(dev);
     for (unsigned int i = 0; i < num_channels; i++) {
         struct iio_channel *ch = iio_device_get_channel(dev, i);
         iio_channel_enable(ch);
     }
+    printf("Gravity channels enabled\r\n");
     // Create buffer
+    // Having issues creating buffer when using BUSTER OS 4/16/25 CT
     size_t buf_size = 1; // number of samples
     struct iio_buffer *buf = iio_device_create_buffer(dev, buf_size, false);
     if (!buf) {
