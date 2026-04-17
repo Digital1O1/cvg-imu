@@ -84,7 +84,9 @@ int main() {
         return 1;
     }
     printf("IIO Context created \r\n");
-    struct iio_device *dev = iio_context_find_device(ctx, "gravity");
+    //struct iio_device *dev = iio_context_find_device(ctx, "gravity");
+    
+    struct iio_device *dev = iio_context_find_device(ctx, 1);
     if (!dev) {
         fprintf(stderr, "Could not find gravity device.\n");
         iio_context_destroy(ctx);
