@@ -1,5 +1,5 @@
 // tracks the direction the glasses are facing to turn the laser off when the glasses turn to look away from straight down
-
+// THIS PROGRAM MUST BE RAN WITH ADMIN/SUDO CT 4/20/26
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -84,9 +84,9 @@ int main() {
         return 1;
     }
     printf("IIO Context created \r\n");
-    //struct iio_device *dev = iio_context_find_device(ctx, "gravity");
+    struct iio_device *dev = iio_context_find_device(ctx, "gravity");
     
-    struct iio_device *dev = iio_context_find_device(ctx, 1);
+    //struct iio_device *dev = iio_context_find_device(ctx, 3);
     if (!dev) {
         fprintf(stderr, "Could not find gravity device.\n");
         iio_context_destroy(ctx);

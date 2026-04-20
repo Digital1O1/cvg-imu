@@ -25,9 +25,9 @@ static float GRAVITY_OFFSET[3] = {
 };
 
 static const char *RAW_FILES[3] = {
-    DEVICE_PATH "/gravity_x_raw",
-    DEVICE_PATH "/gravity_y_raw",
-    DEVICE_PATH "/gravity_z_raw"
+    DEVICE_PATH "/in_accel_x_raw",
+    DEVICE_PATH "/in_accel_y_raw",
+    DEVICE_PATH "/in_accel_z_raw"
 };
 
 /* -------------------------------------------------- */
