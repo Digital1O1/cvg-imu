@@ -4,6 +4,9 @@ This program uses libiio to access various sensors within the Epson Moverio BT-4
 
 This program can be adjusted to work with other HMDs/IMUs that support the IIO interface by modifying the libiio implementation. If no gravity vector is provided by the glasses, one can be calculated using the accelerometer, magnetometer, and gyroscope sensors. The program can also support any field of vision that can be defined mathematically using those two vectors; the 50-degree cone was chosen for simplicity.
 
+# Ensure you're using the `head-track` branch
+`https://github.com/UTSW-Achilefu-Lab/CVG-Tietronix/tree/head-tracking`
+
 # THE EXECUITABLE MUST BE RAN WITH SUDO
 ## Example
 ```bash

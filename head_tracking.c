@@ -1,5 +1,6 @@
 // tracks the direction the glasses are facing to turn the laser off when the glasses turn to look away from straight down
 // THIS PROGRAM MUST BE RAN WITH ADMIN/SUDO CT 4/20/26
+// gcc head_tracking.c -o head_tracking -liio -lm
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +68,17 @@ void calibrate_gravity_offset(struct iio_device *dev) {
 }
 
 int main() {
+    
+    //Sys call stuff
+    const char *path = "/sys/class/leds/led0::channel0/brightness";
+    FILE *fp = fopen(path, "w");
+
+    if (fp == NULL) {
+        perror("Failed to open brightness file");
+        return 1;
+    }
+
+
     // Ensure the named pipe exists
     if (access("/tmp/hmdop_laser_pipe", F_OK) == -1) {
         if (mkfifo("/tmp/hmdop_laser_pipe", 0666) != 0) {
@@ -140,9 +152,20 @@ int main() {
         int in_range = (angle_deg <= 60.0f);
         if (in_range) {
             printf("Within range   ");
+            //rewind(fp);
+            //fprintf(fp, "150\n");
+            //fflush(fp);
+           
+           //system("echo 150 | sudo tee /sys/class/leds/led0::channel0/brightness");
+           //fprintf(fp,"60");
         } else {
             printf("Outside range   ");
-            if (was_in_range) {
+            //system("echo 0 | sudo tee /sys/class/leds/led0::channel0/brightness");
+            //fprintf(fp,"60");
+            rewind(fp);
+            fprintf(fp, "0\n");
+            fflush(fp);
+           if (was_in_range) {
                 int pipe_fd = open("/tmp/hmdop_laser_pipe", O_WRONLY | O_NONBLOCK);
                 if (pipe_fd >= 0) {
                     const char *msg = "LASER_OFF\n";
@@ -155,6 +178,7 @@ int main() {
         fflush(stdout);
         usleep(10000); // 10 ms (100Hz)
     }
+    fclose(fp);
     iio_buffer_destroy(buf);
     iio_context_destroy(ctx);
     printf("\nStopping.\n");
