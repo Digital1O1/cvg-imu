@@ -13,7 +13,7 @@ int main()
     if (!ctx) return 1;
 
     /* use iio:deviceX directly */
-    int iioDevice = 0;
+    int iioDevice = 3;
     struct iio_device *dev = iio_context_get_device(ctx, iioDevice );
 
     if (!dev) {

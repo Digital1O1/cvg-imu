@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <iio.h>
-
+#include <errno.h>
 int main(void)
 {
     /* ------------------------------------ */
@@ -37,11 +37,11 @@ int main(void)
     /* Find gravity device                  */
     /* ------------------------------------ */
     //struct iio_device *dev =
-    //    iio_context_find_device(ctx, "gravity");
+    //    iio_context_find_device(ctx, 1);
    
     /* use iio:device1 directly */
     struct iio_device *dev =
-        iio_context_get_device(ctx, 1);
+        iio_context_get_device(ctx,3);
 
     if (!dev) {
         printf("Gravity device not found\n");
@@ -57,15 +57,28 @@ int main(void)
     unsigned int count =
         iio_device_get_channels_count(dev);
 
+    int enabled_count =0;
     for (unsigned int i = 0; i < count; i++) {
 
         struct iio_channel *ch =
             iio_device_get_channel(dev, i);
-
+    if (!iio_channel_is_scan_element(ch)) {
+        printf("Skipping non-scan-element channel %d\n", i);
+        continue;
+    }
         iio_channel_enable(ch);
+        enabled_count++;
+        printf("Enabled channel: %s\n", iio_channel_get_id(ch));
     }
 
-    printf("Channels enabled\n");
+    //printf("Channels enabled\n");
+    printf("%d scan-element channels enabled\n", enabled_count);
+
+if (enabled_count == 0) {
+    printf("No scan-element channels found — cannot create buffer\n");
+    iio_context_destroy(ctx);
+    return 1;
+}
 
     /* ------------------------------------ */
     /* Create buffer                        */
@@ -74,7 +87,8 @@ int main(void)
         iio_device_create_buffer(dev, 1, false);
 
     if (!buf) {
-        printf("Buffer creation failed\n");
+        //printf("Buffer creation failed\n");
+        printf("Buffer creation failed: %s (errno %d)\n", strerror(errno), errno);
         iio_context_destroy(ctx);
         return 1;
     }
@@ -91,7 +105,9 @@ int main(void)
             iio_buffer_refill(buf);
 
         if (nbytes < 0) {
-            printf("Refill failed\n");
+            //printf("Refill failed\n");
+            printf("Refill failed: %s (errno %d)\n", strerror(-nbytes), (int)-nbytes);
+
             break;
         }
 
